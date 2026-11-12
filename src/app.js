@@ -616,6 +616,7 @@ let activeFocus = null;
 let remixSelectedShotId = "";
 let selectedModelCategory = "text";
 let modelEditorId = "";
+let modelDraftCategory = "";
 let selectedMusicMood = "warm-cinematic";
 let openNavIds = new Set([
   "guide-14-steps",
@@ -1896,16 +1897,22 @@ function modelParameterExample(category) {
 function modelEditorForm(editingModel) {
   const categories = runtime.modelSchema?.categories || [];
   const providers = runtime.modelSchema?.providers || [];
-  const category = editingModel?.category || selectedModelCategory || "text";
+  const category =
+    modelDraftCategory || editingModel?.category || selectedModelCategory || "text";
   const availableProviders = providers.filter((provider) =>
     provider.categories.includes(category)
   );
-  const provider = editingModel?.provider || availableProviders[0]?.id || "";
+  const provider =
+    (editingModel &&
+      availableProviders.some((item) => item.id === editingModel.provider) &&
+      editingModel.provider) ||
+    availableProviders[0]?.id ||
+    "";
   return `
     <form class="model-editor" data-model-form data-model-editor-id="${esc(editingModel?.id || "")}">
       <div class="section-title"><div><h3>${editingModel ? "编辑模型配置" : "新增模型配置"}</h3><p>API Key 只来自本机登录态或环境变量，页面不接收密钥</p></div><span class="badge ${editingModel ? "gold" : "green"}">${editingModel ? "编辑中" : "新配置"}</span></div>
       <div class="model-editor-grid">
-        <label class="field"><span class="field-label">能力类别</span><select class="select" data-model-field="category" ${editingModel ? "disabled" : ""}>${categories.map((item) => `<option value="${item.id}" ${item.id === category ? "selected" : ""}>${esc(item.label)}</option>`).join("")}</select><small class="field-hint">${esc(modelCategoryMeta(category).description)}</small></label>
+        <label class="field"><span class="field-label">能力类别</span><select class="select" data-model-field="category">${categories.map((item) => `<option value="${item.id}" ${item.id === category ? "selected" : ""}>${esc(item.label)}</option>`).join("")}</select><small class="field-hint">${esc(modelCategoryMeta(category).description)}</small></label>
         <label class="field"><span class="field-label">供应商</span><select class="select" data-model-field="provider">${availableProviders.map((item) => `<option value="${item.id}" ${item.id === provider ? "selected" : ""}>${esc(item.label)}</option>`).join("")}</select></label>
         <label class="field"><span class="field-label">显示名称</span><input class="input" data-model-field="label" value="${esc(editingModel?.label || "")}" placeholder="例如：Seedance 自定义 Endpoint" /></label>
         <label class="field"><span class="field-label">模型 ID / Endpoint / 调用名</span><input class="input" data-model-field="model" value="${esc(editingModel?.model || "")}" placeholder="例如：ep-... 或 doubao-seedance-2.0" /></label>
@@ -2965,7 +2972,7 @@ function bindCurrentView() {
     const profileField = modelForm.querySelector("[data-model-field='profile']");
     categoryField?.addEventListener("change", () => {
       selectedModelCategory = categoryField.value;
-      modelEditorId = "";
+      modelDraftCategory = categoryField.value;
       render();
     });
     const syncProviderFields = () => {
@@ -3645,16 +3652,19 @@ async function handleAction(button) {
     if (!model) return;
     selectedModelCategory = model.category;
     modelEditorId = model.id;
+    modelDraftCategory = model.category;
     render();
   }
   if (action === "new-model") {
     modelEditorId = "";
+    modelDraftCategory = selectedModelCategory;
     render();
     document.querySelector("[data-model-field='label']")?.focus();
   }
   if (action === "select-model-category") {
     selectedModelCategory = button.dataset.category || "text";
     modelEditorId = "";
+    modelDraftCategory = selectedModelCategory;
     render();
   }
   if (action === "clone-model") {
@@ -3672,6 +3682,7 @@ async function handleAction(button) {
     });
     selectedModelCategory = model.category;
     modelEditorId = created.item.id;
+    modelDraftCategory = created.item.category;
     await refreshRuntime();
     showToast("模型配置已复制，请修改名称或模型 ID 后保存");
   }
@@ -3680,7 +3691,10 @@ async function handleAction(button) {
     if (!model) return;
     if (!window.confirm(`确认删除模型“${model.label}”吗？已生成素材不会受影响。`)) return;
     await api.deleteModel(model.id);
-    if (modelEditorId === model.id) modelEditorId = "";
+    if (modelEditorId === model.id) {
+      modelEditorId = "";
+      modelDraftCategory = selectedModelCategory;
+    }
     await refreshRuntime();
     showToast("模型配置已删除");
   }
@@ -3717,6 +3731,7 @@ async function handleAction(button) {
       : await api.createModel(payload);
     selectedModelCategory = result.item.category;
     modelEditorId = result.item.id;
+    modelDraftCategory = result.item.category;
     await refreshRuntime();
     showToast(editorId ? "模型配置已保存，请重新测试连接" : "新模型已创建");
   }
