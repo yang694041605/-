@@ -2233,9 +2233,12 @@ async function testModel(model) {
     if (model.provider === "volcengine-ark") {
       const resources = await arkResources(model.profile, model.category);
       const ids = (resources.items || []).map((item) => item.id);
+      const callable = ids.includes(model.model);
       return {
-        ok: true,
-        message: `连接正常，发现 ${ids.length} 个${model.category}资源`,
+        ok: callable,
+        message: callable
+          ? `连接正常，当前模型 ${model.model} 可见`
+          : `当前 Profile 未发现可调用的 ${model.model}；资源数 ${ids.length}`,
         resources: ids
       };
     }
