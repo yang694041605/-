@@ -152,7 +152,8 @@ export async function renderTimeline({
   fps = 24,
   musicPath = "",
   voicePath = "",
-  subtitlePath = ""
+  subtitlePath = "",
+  safeFill = true
 }) {
   if (!Array.isArray(clips) || clips.length === 0) {
     throw new Error("没有可剪辑的视频片段");
@@ -172,7 +173,7 @@ export async function renderTimeline({
       if (!isImage && clip.duration) args.push("-t", String(clip.duration));
       args.push(
         "-vf",
-        `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${fps}`,
+        buildSafeFillFilter(width, height, fps, safeFill),
         "-an",
         "-c:v",
         "libx264",
@@ -222,17 +223,14 @@ export async function renderTimeline({
     if (audioInputs.length > 0) {
       const audioStartIndex = subtitlePath ? 2 : 1;
       const pictureDuration = await getDuration(silentPath);
-      const filters = audioInputs.map((audio, index) => {
-        const inputIndex = audioStartIndex + index;
-        return `[${inputIndex}:a]volume=${audio.volume},atrim=duration=${pictureDuration}[a${index}]`;
+      const filter = buildAudioMixFilter({
+        audioInputs,
+        audioStartIndex,
+        pictureDuration
       });
-      const mixInputs = audioInputs.map((_, index) => `[a${index}]`).join("");
-      filters.push(
-        `${mixInputs}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=2,loudnorm=I=-14:TP=-1:LRA=11[aout]`
-      );
       args.push(
         "-filter_complex",
-        filters.join(";"),
+        filter,
         "-map",
         "0:v:0",
         "-map",
@@ -290,6 +288,59 @@ export async function renderTimeline({
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
+}
+
+export function buildSafeFillFilter(width, height, fps, safeFill = true) {
+  if (!safeFill) {
+    return `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${fps}`;
+  }
+  return [
+    `split=2[background][foreground]`,
+    `[background]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},gblur=sigma=28[blurred]`,
+    `[foreground]scale=${width}:${height}:force_original_aspect_ratio=decrease[subject]`,
+    `[blurred][subject]overlay=(W-w)/2:(H-h)/2:format=auto,fps=${fps}`
+  ].join(";");
+}
+
+export function buildAudioMixFilter({
+  audioInputs,
+  audioStartIndex,
+  pictureDuration
+}) {
+  if (!Array.isArray(audioInputs) || audioInputs.length === 0) {
+    return "";
+  }
+  const filters = [];
+  const labels = [];
+  audioInputs.forEach((audio, index) => {
+    const inputIndex = audioStartIndex + index;
+    filters.push(
+      `[${inputIndex}:a]volume=${audio.volume},atrim=duration=${pictureDuration},asetpts=PTS-STARTPTS[a${index}]`
+    );
+    labels.push(`[a${index}]`);
+  });
+
+  if (audioInputs.length >= 2) {
+    const musicIndex = audioInputs.findIndex((audio) => audio.loop);
+    const voiceIndex = audioInputs.findIndex((audio) => !audio.loop);
+    if (musicIndex >= 0 && voiceIndex >= 0) {
+      filters.push(
+        `[a${voiceIndex}]asplit=2[voiceMix][voiceKey]`
+      );
+      filters.push(
+        `[a${musicIndex}][voiceKey]sidechaincompress=threshold=0.025:ratio=8:attack=15:release=350[musicDucked]`
+      );
+      filters.push(
+        `[musicDucked][voiceMix]amix=inputs=2:duration=longest:dropout_transition=2,loudnorm=I=-14:TP=-1:LRA=11[aout]`
+      );
+      return filters.join(";");
+    }
+  }
+
+  filters.push(
+    `${labels.join("")}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=2,loudnorm=I=-14:TP=-1:LRA=11[aout]`
+  );
+  return filters.join(";");
 }
 
 async function getDuration(filePath) {

@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sceneCutsToShots } from "../server/media.mjs";
+import {
+  buildAudioMixFilter,
+  buildSafeFillFilter,
+  sceneCutsToShots
+} from "../server/media.mjs";
 import { renderOriginalBgm } from "../server/bgm.mjs";
 
 test("模板切点转换为连续 24 FPS 镜头", () => {
@@ -30,4 +34,25 @@ test("本地原创配乐输出有效 WAV", async () => {
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
+});
+
+test("画面归一化默认使用模糊背景而不是黑色补边", () => {
+  const filter = buildSafeFillFilter(1280, 720, 24, true);
+  assert.match(filter, /gblur/);
+  assert.match(filter, /overlay/);
+  assert.doesNotMatch(filter, /color=black/);
+});
+
+test("旁白出现时音乐通过侧链自动压低", () => {
+  const filter = buildAudioMixFilter({
+    audioInputs: [
+      { loop: true, volume: 0.42 },
+      { loop: false, volume: 1 }
+    ],
+    audioStartIndex: 2,
+    pictureDuration: "40.000"
+  });
+  assert.match(filter, /sidechaincompress/);
+  assert.match(filter, /loudnorm=I=-14/);
+  assert.match(filter, /musicDucked/);
 });

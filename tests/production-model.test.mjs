@@ -9,7 +9,8 @@ import {
   parseRouteHash,
   routeHash,
   shotReferenceWindow,
-  shotReviewComplete
+  shotReviewComplete,
+  splitSubtitleText
 } from "../src/production-model.mjs";
 
 test("双入口路由可以正向生成并从地址恢复", () => {
@@ -148,4 +149,16 @@ test("镜头八项人工质检全部通过后才可交付", () => {
   };
   assert.equal(shotReviewComplete(review), true);
   assert.equal(shotReviewComplete({ ...review, hands: "pending" }), false);
+});
+
+test("中文字幕按语义和 18 字安全宽度拆分", () => {
+  const lines = splitSubtitleText(
+    "沈知远与林晚晴从雨天借伞开始。今天，他们把余生写成同一个故事。",
+    18
+  );
+  assert.deepEqual(lines, [
+    "沈知远与林晚晴从雨天借伞开始",
+    "今天，他们把余生写成同一个故事"
+  ]);
+  assert.ok(lines.every((line) => line.length <= 18));
 });

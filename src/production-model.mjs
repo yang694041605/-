@@ -147,6 +147,23 @@ export function shotReviewComplete(review = {}) {
   return REVIEW_CHECKS.every((key) => review?.[key] === "passed");
 }
 
+export function splitSubtitleText(text, maxChars = 18) {
+  const limit = Math.max(4, Number(maxChars) || 18);
+  const sentences = String(text || "")
+    .split(/[。！？!?；;\n]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const source = sentences.length ? sentences : [String(text || "").trim()].filter(Boolean);
+  return source.flatMap((line) => {
+    if (line.length <= limit) return [line];
+    const chunks = [];
+    for (let cursor = 0; cursor < line.length; cursor += limit) {
+      chunks.push(line.slice(cursor, cursor + limit));
+    }
+    return chunks;
+  });
+}
+
 export function bindStoryboardToTemplate(storyboard, template) {
   const shots = Array.isArray(storyboard) ? storyboard : [];
   const templateShots = Array.isArray(template?.recipe?.shots)

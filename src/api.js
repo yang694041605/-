@@ -144,6 +144,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  renderProductionTimeline: (projectId, payload = {}) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/render-timeline`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   createVvvProject: (payload) =>
     request("/api/vvv/project", {
       method: "POST",

@@ -3242,39 +3242,14 @@ async function handleAction(button) {
     showToast("SRT 字幕已保存到资产库");
   }
   if (action === "render-project") {
-    const videos = runtime.assets.filter((asset) => asset.kind === "video" && asset.localPath);
-    const photos = runtime.assets.filter(
-      (asset) => asset.kind === "project-photo" && asset.localPath
-    );
-    if (!videos.length && !photos.length) {
-      showToast("请先添加照片，或在生成中心完成视频镜头");
-      return;
-    }
-    const voice = runtime.assets.find((asset) => asset.kind === "voice" && asset.localPath);
-    const music = runtime.assets.find((asset) => asset.kind === "music" && asset.localPath);
-    const subtitle = runtime.assets.find(
-      (asset) => asset.kind === "subtitle" && asset.localPath
-    );
+    const timelineResult = await api.getProjectTimeline(currentProjectId);
+    const timeline = timelineResult.item;
     button.disabled = true;
     button.textContent = "正在合成成片…";
-    const result = await api.render({
-      projectId: currentProjectId,
-      title: state.projectName,
-      duration: state.duration,
-      fps: 24,
-      width: 1280,
-      height: 720,
-      clips: [
-        ...videos.map((asset) => ({ path: asset.localPath })),
-        ...photos.map((asset) => ({ path: asset.localPath, duration: 4 }))
-      ],
-      voicePath: voice?.localPath || "",
-      musicPath: music?.localPath || "",
-      subtitlePath: subtitle?.localPath || "",
-      autoMusic: !music,
-      mood: "warm-cinematic"
+    const result = await api.renderProductionTimeline(currentProjectId, {
+      timelineHash: timeline.hash
     });
-    await trackJob(result.job.id, "FFmpeg 成片合成");
+    await trackJob(result.job.id, "当前时间轴成片合成");
     await refreshRuntime();
   }
   if (action === "build-treatment") {

@@ -52,6 +52,7 @@ import {
   sha256Text,
   validateRenderTimeline
 } from "./production.mjs";
+import { splitSubtitleText } from "../src/production-model.mjs";
 
 seedDefaults();
 migrateProjectRecords();
@@ -222,6 +223,62 @@ async function handleApi(request, response, url) {
         step: Number(project.workflow?.currentStep || 1)
       })
     });
+  }
+
+  const projectRenderMatch = path.match(/^\/api\/projects\/([^/]+)\/render-timeline$/);
+  if (projectRenderMatch && method === "POST") {
+    const project = getEntity("project", projectRenderMatch[1]);
+    if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const body = await readJson(request);
+    const assets = projectAssets(project.id);
+    const timeline = buildProjectTimeline(
+      project,
+      assets,
+      Number(project.timelineRevision) || 1
+    );
+    if (body.timelineHash && body.timelineHash !== timeline.hash) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "时间轴已变化，请重新检查并确认当前版本"
+      });
+    }
+    let resolved;
+    try {
+      resolved = validateRenderTimeline(project, timeline, assets);
+    } catch (error) {
+      return sendJson(response, 409, { ok: false, error: safeError(error) });
+    }
+    const voice = resolved.voiceAssets[0];
+    const music = resolved.musicAssets[0];
+    const subtitle = resolved.subtitleAssets[0];
+    const job = createJob("timeline-render", {
+      projectId: project.id,
+      input: {
+        title: project.name || "婚礼微电影",
+        duration: resolved.duration,
+        fps: timeline.fps,
+        width: 1280,
+        height: 720,
+        clips: resolved.clips.map((clip) => ({
+          path: clip.path,
+          start: clip.start,
+          duration: clip.duration,
+          shotId: clip.shotId,
+          assetId: clip.asset.id,
+          contentHash: clip.asset.contentHash || clip.asset.sha256 || ""
+        })),
+        voicePath: voice?.localPath || "",
+        musicPath: music?.localPath || "",
+        subtitlePath: subtitle?.localPath || "",
+        autoMusic: !music,
+        mood: project.musicMood || "warm-cinematic",
+        timelineHash: timeline.hash,
+        timelineRevision: timeline.revision,
+        timeline
+      }
+    });
+    queueJob(job.id, () => renderJob(job.id));
+    return sendJson(response, 202, { ok: true, job });
   }
 
   const projectApproveMatch = path.match(
@@ -690,18 +747,16 @@ async function handleApi(request, response, url) {
   }
 
   if (path === "/api/render" && method === "POST") {
-    const body = await readJson(request);
+    const legacyBody = await readJson(request).catch(() => ({}));
     try {
-      rejectFilesystemPathKeys(body);
+      rejectFilesystemPathKeys(legacyBody);
     } catch (error) {
       return sendJson(response, 400, { ok: false, error: safeError(error) });
     }
-    const job = createJob("render", {
-      projectId: body.projectId || "",
-      input: body
+    return sendJson(response, 410, {
+      ok: false,
+      error: "旧版路径合成接口已停用，请使用当前项目时间轴合成"
     });
-    queueJob(job.id, () => renderJob(job.id));
-    return sendJson(response, 202, { ok: true, job });
   }
 
   if (path === "/api/vvv/project" && method === "POST") {
@@ -1415,6 +1470,9 @@ async function renderJob(jobId) {
           autoMusic: job.input.autoMusic !== false
         },
         subtitlePath: job.input.subtitlePath || "",
+        timelineHash: job.input.timelineHash || "",
+        timelineRevision: job.input.timelineRevision || 1,
+        timeline: job.input.timeline || null,
         outputPath,
         verifiedMedia: verified,
         advancedCheck,
@@ -1431,6 +1489,8 @@ async function renderJob(jobId) {
     jobId: job.id,
     title: job.input.title || "婚礼微电影",
     localPath: outputPath,
+    contentHash: await sha256File(outputPath),
+    version: 1,
     media: verified
   });
   const asset = saveEntity("asset", {
@@ -1442,6 +1502,8 @@ async function renderJob(jobId) {
     url: outputUrl,
     mimeType: "video/mp4",
     media: verified,
+    contentHash: await sha256File(outputPath),
+    version: 1,
     jobId: job.id
   });
   const editProjectAsset = saveEntity("asset", {
@@ -1640,19 +1702,7 @@ function normalizeAspect(width, height) {
 }
 
 function splitSubtitleLines(text, duration) {
-  const raw = text
-    .split(/[。！？!?；;\n]+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const base = raw.length ? raw : [text];
-  const sentences = base.flatMap((line) => {
-    if (line.length <= 18) return [line];
-    const chunks = [];
-    for (let cursor = 0; cursor < line.length; cursor += 18) {
-      chunks.push(line.slice(cursor, cursor + 18));
-    }
-    return chunks;
-  });
+  const sentences = splitSubtitleText(text, 18);
   const weights = sentences.map((line) => Math.max(4, line.length));
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   let cursor = 0;
