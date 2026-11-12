@@ -614,6 +614,8 @@ let activeRouteInfo = parseRouteHash(window.location.hash);
 let activeRoute = routeNameFromInfo(activeRouteInfo);
 let activeFocus = null;
 let remixSelectedShotId = "";
+let selectedModelCategory = "text";
+let modelEditorId = "";
 let selectedMusicMood = "warm-cinematic";
 let openNavIds = new Set([
   "guide-14-steps",
@@ -636,7 +638,11 @@ let runtime = {
   exports: [],
   jobs: [],
   timeline: null,
-  approvalSnapshots: {}
+  approvalSnapshots: {},
+  modelSchema: {
+    categories: [],
+    providers: []
+  }
 };
 
 function loadState() {
@@ -700,7 +706,11 @@ function saveState({ quiet = false } = {}) {
 
 async function refreshRuntime({ rerender = true } = {}) {
   try {
-    const [bootstrap, health] = await Promise.all([api.bootstrap(), api.health()]);
+    const [bootstrap, health, modelPayload] = await Promise.all([
+      api.bootstrap(),
+      api.health(),
+      api.getModels().catch(() => ({ schema: runtime.modelSchema }))
+    ]);
     runtime = {
       online: true,
       health,
@@ -710,7 +720,13 @@ async function refreshRuntime({ rerender = true } = {}) {
       looks: bootstrap.looks || [],
       assets: bootstrap.assets || [],
       exports: bootstrap.exports || [],
-      jobs: bootstrap.jobs || []
+      jobs: bootstrap.jobs || [],
+      timeline: null,
+      approvalSnapshots: {},
+      modelSchema: modelPayload.schema || runtime.modelSchema || {
+        categories: [],
+        providers: []
+      }
     };
     const project =
       runtime.projects.find((item) => item.id === currentProjectId) || runtime.projects[0];
@@ -1823,59 +1839,139 @@ function templatesPage() {
   `;
 }
 
+function modelStatusLabel(status = "") {
+  const labels = {
+    ready: "可用",
+    unverified: "待测试",
+    visible_unverified: "资源可见，待实测",
+    subscription_expired: "套餐已过期",
+    external_service_blocked: "外部服务不可用",
+    needs_setup: "待初始化",
+    resource_not_found: "未发现资源",
+    error: "异常"
+  };
+  return labels[status] || status || "未配置";
+}
+
+function modelStatusTone(status = "") {
+  if (status === "ready") return "green";
+  if (["unverified", "visible_unverified", "needs_setup"].includes(status)) return "gold";
+  return "red";
+}
+
+function modelProviderMeta(providerId) {
+  return (
+    runtime.modelSchema?.providers?.find((item) => item.id === providerId) || {
+      id: providerId,
+      label: providerId,
+      categories: [],
+      credential: "",
+      fields: []
+    }
+  );
+}
+
+function modelCategoryMeta(categoryId) {
+  return (
+    runtime.modelSchema?.categories?.find((item) => item.id === categoryId) || {
+      id: categoryId,
+      label: categoryId,
+      description: ""
+    }
+  );
+}
+
+function modelParameterExample(category) {
+  const examples = {
+    text: { temperature: 0.7, maxOutputTokens: 6000 },
+    image: { size: "2K", width: 1024, height: 1365 },
+    video: { resolution: "720p", duration: 5, ratio: "16:9" },
+    voice: { rate: -1, voice: "Microsoft Yaoyao" },
+    music: { tempo: 78, mood: "warm-cinematic" },
+    editor: { fps: 24, videoCodec: "libx264" }
+  };
+  return JSON.stringify(examples[category] || {}, null, 2);
+}
+
+function modelEditorForm(editingModel) {
+  const categories = runtime.modelSchema?.categories || [];
+  const providers = runtime.modelSchema?.providers || [];
+  const category = editingModel?.category || selectedModelCategory || "text";
+  const availableProviders = providers.filter((provider) =>
+    provider.categories.includes(category)
+  );
+  const provider = editingModel?.provider || availableProviders[0]?.id || "";
+  return `
+    <form class="model-editor" data-model-form data-model-editor-id="${esc(editingModel?.id || "")}">
+      <div class="section-title"><div><h3>${editingModel ? "编辑模型配置" : "新增模型配置"}</h3><p>API Key 只来自本机登录态或环境变量，页面不接收密钥</p></div><span class="badge ${editingModel ? "gold" : "green"}">${editingModel ? "编辑中" : "新配置"}</span></div>
+      <div class="model-editor-grid">
+        <label class="field"><span class="field-label">能力类别</span><select class="select" data-model-field="category" ${editingModel ? "disabled" : ""}>${categories.map((item) => `<option value="${item.id}" ${item.id === category ? "selected" : ""}>${esc(item.label)}</option>`).join("")}</select><small class="field-hint">${esc(modelCategoryMeta(category).description)}</small></label>
+        <label class="field"><span class="field-label">供应商</span><select class="select" data-model-field="provider">${availableProviders.map((item) => `<option value="${item.id}" ${item.id === provider ? "selected" : ""}>${esc(item.label)}</option>`).join("")}</select></label>
+        <label class="field"><span class="field-label">显示名称</span><input class="input" data-model-field="label" value="${esc(editingModel?.label || "")}" placeholder="例如：Seedance 自定义 Endpoint" /></label>
+        <label class="field"><span class="field-label">模型 ID / Endpoint / 调用名</span><input class="input" data-model-field="model" value="${esc(editingModel?.model || "")}" placeholder="例如：ep-... 或 doubao-seedance-2.0" /></label>
+        <label class="field"><span class="field-label">Profile（火山方舟）</span><input class="input" data-model-field="profile" value="${esc(editingModel?.profile || "")}" placeholder="留空则使用当前默认 Profile" /></label>
+        <div class="field"><span class="field-label">状态</span><div class="model-status-readonly"><span class="badge ${modelStatusTone(editingModel?.status || "unverified")}">${esc(modelStatusLabel(editingModel?.status || "unverified"))}</span><small>${editingModel?.lastTest?.message ? esc(editingModel.lastTest.message) : "修改连接信息后需要重新测试"}</small></div></div>
+      </div>
+      <label class="field" style="margin-top:14px;"><span class="field-label">模型参数 JSON</span><textarea class="textarea model-params-input" data-model-field="parameters" spellcheck="false">${esc(Object.keys(editingModel?.parameters || {}).length ? JSON.stringify(editingModel.parameters, null, 2) : modelParameterExample(category))}</textarea><small class="field-hint">示例：${esc(modelParameterExample(category))}</small></label>
+      <div class="model-editor-switches">
+        <label class="switch-line"><input type="checkbox" data-model-field="enabled" ${editingModel?.enabled !== false ? "checked" : ""} /><span>启用此模型</span></label>
+        <label class="switch-line"><input type="checkbox" data-model-field="isDefault" ${editingModel?.isDefault ? "checked" : ""} /><span>设为该类别默认模型</span></label>
+      </div>
+      <div class="model-editor-actions">
+        <button class="button primary" type="button" data-action="save-model-config">${icon("shield")}${editingModel ? "保存修改" : "创建模型"}</button>
+        ${editingModel ? `<button class="button ghost" type="button" data-action="clone-model" data-model-id="${editingModel.id}">复制配置</button><button class="button ghost danger-text" type="button" data-action="delete-model" data-model-id="${editingModel.id}">删除模型</button>` : ""}
+      </div>
+    </form>`;
+}
+
 function modelCenterPage() {
   const models = runtime.models || [];
-  const categories = [
-    ["text", "文字生成", "故事、剧本、分镜和提示词"],
-    ["image", "图片生成", "人物定妆、服装和场景"],
-    ["video", "视频生成", "动态镜头、动作与镜头替换"],
-    ["vision", "视觉理解", "模板、镜头和参考素材分析"],
-    ["voice", "语音合成", "旁白、誓言和角色配音"],
-    ["music", "音乐生成", "原创 BGM 与情绪曲线"],
-    ["editor", "剪辑引擎", "本地 FFmpeg 合成与导出"]
-  ];
+  const categories = runtime.modelSchema?.categories || [];
+  const providers = runtime.modelSchema?.providers || [];
+  if (!categories.some((item) => item.id === selectedModelCategory)) {
+    selectedModelCategory = categories[0]?.id || "text";
+  }
+  const selectedMeta = modelCategoryMeta(selectedModelCategory);
+  const categoryModels = models.filter(
+    (model) => model.category === selectedModelCategory
+  );
+  const editingModel = modelEditorId
+    ? models.find((model) => model.id === modelEditorId) || null
+    : null;
   return `
     <div class="page">
       ${pageHeader("models")}
-      <div class="notice" style="margin-bottom:18px;">${icon("shield")}<div><strong>凭证不会进入页面</strong>模型通过本地服务读取已有登录态或环境变量。切换模型只影响后续任务，不会覆盖已经生成并通过确认的素材。</div></div>
-      <section class="card card-pad">
-        <div class="section-title"><div><h2>模型配置</h2><p>${runtime.online ? `本地服务在线 · 火山 ${runtime.health?.arkAuth?.loggedIn ? "已登录" : "未登录"}` : "本地服务未连接"}</p></div><button class="button secondary small-button" data-action="test-all-models">测试全部模型</button></div>
-        <div class="feature-grid">
-          ${categories
-            .map(([category, title, description]) => {
-              const items = models.filter((model) => model.category === category);
-              return `
-                <article class="feature-card">
-                  <div class="feature-icon">${esc(title.slice(0, 1))}</div>
-                  <h4>${esc(title)}</h4>
-                  <p>${esc(description)}</p>
-                  <div class="stack" style="gap:9px;margin-top:14px;">
-                    ${
-                      items.length
-                        ? items
-                            .map(
-                              (model) => `
-                              <div style="padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.36);">
-                                <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-                                  <div><strong style="font-size:12.5px;">${esc(model.label)}</strong><small style="display:block;color:var(--muted);font-size:12px;word-break:break-all;">${esc(model.model)}</small></div>
-                                  <span class="badge ${model.status === "ready" ? "green" : model.status === "needs_setup" || model.status === "external_service_blocked" ? "gold" : "red"}">${esc(model.status)}</span>
-                                </div>
-                                <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;">
-                                  <button class="button ghost small-button" data-action="test-model" data-model-id="${model.id}">测试连接</button>
-                                  <button class="button ghost small-button" data-action="edit-model" data-model-id="${model.id}">修改模型</button>
-                                  <button class="button secondary small-button" data-action="set-default-model" data-model-id="${model.id}">设为默认</button>
-                                </div>
-                              </div>`
-                            )
-                            .join("")
-                        : '<p class="small muted">尚未配置该模态模型。</p>'
-                    }
-                  </div>
-                </article>`;
-            })
-            .join("")}
+      <div class="notice" style="margin-bottom:18px;">${icon("shield")}<div><strong>模型配置与凭证分离</strong>这里只保存供应商、模型 ID、Profile 和执行参数。API Key、Token 和设备凭据不会进入浏览器、数据库或页面。</div></div>
+      <section class="card card-pad model-overview">
+        <div class="section-title"><div><h2>可配置模型中心</h2><p>${runtime.online ? `本地服务在线 · Ark ${runtime.health?.arkAuth?.loggedIn ? "已登录" : "未登录"}` : "本地服务未连接"}</p></div><div class="chip-row"><button class="button secondary small-button" data-action="test-all-models">测试全部启用模型</button><button class="button primary small-button" data-action="new-model">${icon("plus")}新增模型</button></div></div>
+        <div class="model-category-tabs">
+          ${categories.map((category) => {
+            const items = models.filter((model) => model.category === category.id);
+            const defaultModel = items.find((model) => model.isDefault);
+            return `<button class="model-category-tab ${category.id === selectedModelCategory ? "active" : ""}" data-action="select-model-category" data-category="${category.id}"><strong>${esc(category.label)}</strong><span>${items.length} 个 · ${defaultModel ? `默认：${esc(defaultModel.label)}` : "未设默认"}</span></button>`;
+          }).join("")}
         </div>
       </section>
+      <div class="model-config-layout">
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>${esc(selectedMeta.label)}</h2><p>${esc(selectedMeta.description)} · ${providers.filter((provider) => provider.categories.includes(selectedModelCategory)).length} 个可用供应商</p></div><span class="badge gold">${categoryModels.length} 个配置</span></div>
+          <div class="model-config-list">
+            ${categoryModels.length ? categoryModels.map((model) => {
+              const provider = modelProviderMeta(model.provider);
+              const paramSummary = Object.entries(model.parameters || {}).slice(0, 4).map(([key, value]) => `${key}=${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ") || "暂无参数";
+              return `<article class="model-config-card ${model.isDefault ? "is-default" : ""} ${model.id === editingModel?.id ? "is-editing" : ""}">
+                <div class="model-config-head"><div><div class="model-title-row"><strong>${esc(model.label)}</strong>${model.isDefault ? '<span class="badge red">默认</span>' : ""}<span class="badge ${modelStatusTone(model.status)}">${esc(modelStatusLabel(model.status))}</span></div><small>${esc(provider.label)} · ${esc(model.model)}</small></div><span class="model-enabled-state">${model.enabled ? "已启用" : "已停用"}</span></div>
+                <div class="model-config-meta"><span>Profile：${esc(model.profile || "当前默认")}</span><span>参数：${esc(paramSummary)}</span><span>最近测试：${model.lastTest?.at ? esc(new Date(model.lastTest.at).toLocaleString("zh-CN")) : "尚未测试"}</span></div>
+                ${model.lastTest?.message ? `<p class="model-test-message">${esc(model.lastTest.message)}</p>` : ""}
+                <div class="model-config-actions"><button class="button ghost small-button" data-action="edit-model" data-model-id="${model.id}">编辑配置</button><button class="button ghost small-button" data-action="test-model" data-model-id="${model.id}">测试连接</button><button class="button ghost small-button" data-action="clone-model" data-model-id="${model.id}">复制</button><button class="button secondary small-button" data-action="set-default-model" data-model-id="${model.id}" ${model.isDefault ? "disabled" : ""}>${model.isDefault ? "当前默认" : "设为默认"}</button></div>
+              </article>`;
+            }).join("") : '<div class="empty-state"><div><div class="empty-state-symbol">型</div><h3>这一类还没有模型</h3><p>右侧可以直接新增配置。</p></div></div>'}
+          </div>
+        </section>
+        <section class="card card-pad model-editor-panel">
+          ${modelEditorForm(editingModel)}
+        </section>
+      </div>
     </div>
   `;
 }
@@ -2861,6 +2957,28 @@ function bindCurrentView() {
     syncPrompt();
   });
   backgroundPolicy?.addEventListener("change", syncPrompt);
+
+  const modelForm = document.querySelector("[data-model-form]");
+  if (modelForm) {
+    const categoryField = modelForm.querySelector("[data-model-field='category']");
+    const providerField = modelForm.querySelector("[data-model-field='provider']");
+    const profileField = modelForm.querySelector("[data-model-field='profile']");
+    categoryField?.addEventListener("change", () => {
+      selectedModelCategory = categoryField.value;
+      modelEditorId = "";
+      render();
+    });
+    const syncProviderFields = () => {
+      if (!profileField || !providerField) return;
+      const isArk = providerField.value === "volcengine-ark";
+      profileField.disabled = !isArk;
+      profileField.placeholder = isArk
+        ? "例如：platform_cn-beijing_ark"
+        : "非火山供应商不使用 Profile";
+    };
+    providerField?.addEventListener("change", syncProviderFields);
+    syncProviderFields();
+  }
 }
 
 document.addEventListener("click", async (event) => {
@@ -3506,9 +3624,7 @@ async function handleAction(button) {
     }
   }
   if (action === "test-all-models") {
-    const candidates = familyModels("text")
-      .concat(familyModels("image"), familyModels("video"), familyModels("vision"))
-      .filter((model) => model.enabled);
+    const candidates = runtime.models.filter((model) => model.enabled);
     button.disabled = true;
     button.textContent = "正在测试…";
     for (const model of candidates) {
@@ -3520,25 +3636,89 @@ async function handleAction(button) {
   if (action === "set-default-model") {
     const model = runtime.models.find((item) => item.id === button.dataset.modelId);
     if (!model) return;
-    const peers = familyModels(model.category);
-    await Promise.all(
-      peers.map((peer) =>
-        api.updateModel(peer.id, { isDefault: peer.id === model.id }).catch(() => {})
-      )
-    );
+    await api.setDefaultModel(model.id);
     await refreshRuntime();
     showToast(`${model.label} 已设为${model.category}默认模型`);
   }
   if (action === "edit-model") {
     const model = runtime.models.find((item) => item.id === button.dataset.modelId);
     if (!model) return;
-    const nextModel = window.prompt("请输入新的模型 ID 或套餐调用名", model.model);
-    if (!nextModel || nextModel === model.model) return;
-    const nextProfile =
-      window.prompt("请输入 Profile（可留空）", model.profile || "") ?? model.profile;
-    await api.updateModel(model.id, { model: nextModel.trim(), profile: nextProfile.trim() });
+    selectedModelCategory = model.category;
+    modelEditorId = model.id;
+    render();
+  }
+  if (action === "new-model") {
+    modelEditorId = "";
+    render();
+    document.querySelector("[data-model-field='label']")?.focus();
+  }
+  if (action === "select-model-category") {
+    selectedModelCategory = button.dataset.category || "text";
+    modelEditorId = "";
+    render();
+  }
+  if (action === "clone-model") {
+    const model = runtime.models.find((item) => item.id === button.dataset.modelId);
+    if (!model) return;
+    const created = await api.createModel({
+      category: model.category,
+      provider: model.provider,
+      label: `${model.label} · 副本`,
+      model: model.model,
+      profile: model.profile || "",
+      enabled: false,
+      isDefault: false,
+      parameters: model.parameters || {}
+    });
+    selectedModelCategory = model.category;
+    modelEditorId = created.item.id;
     await refreshRuntime();
-    showToast("模型配置已更新，请重新测试连接");
+    showToast("模型配置已复制，请修改名称或模型 ID 后保存");
+  }
+  if (action === "delete-model") {
+    const model = runtime.models.find((item) => item.id === button.dataset.modelId);
+    if (!model) return;
+    if (!window.confirm(`确认删除模型“${model.label}”吗？已生成素材不会受影响。`)) return;
+    await api.deleteModel(model.id);
+    if (modelEditorId === model.id) modelEditorId = "";
+    await refreshRuntime();
+    showToast("模型配置已删除");
+  }
+  if (action === "save-model-config") {
+    const form = document.querySelector("[data-model-form]");
+    if (!form) return;
+    const read = (name) => form.querySelector(`[data-model-field='${name}']`);
+    let parameters;
+    try {
+      parameters = JSON.parse(read("parameters")?.value || "{}");
+      if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) {
+        throw new Error("参数必须是 JSON 对象");
+      }
+    } catch (error) {
+      showToast(`模型参数格式错误：${error.message}`);
+      return;
+    }
+    const payload = {
+      category: read("category")?.value || selectedModelCategory,
+      provider: read("provider")?.value || "",
+      label: read("label")?.value.trim() || "",
+      model: read("model")?.value.trim() || "",
+      profile:
+        read("provider")?.value === "volcengine-ark"
+          ? read("profile")?.value.trim() || ""
+          : "",
+      enabled: Boolean(read("enabled")?.checked),
+      isDefault: Boolean(read("isDefault")?.checked),
+      parameters
+    };
+    const editorId = form.dataset.modelEditorId || "";
+    const result = editorId
+      ? await api.updateModel(editorId, payload)
+      : await api.createModel(payload);
+    selectedModelCategory = result.item.category;
+    modelEditorId = result.item.id;
+    await refreshRuntime();
+    showToast(editorId ? "模型配置已保存，请重新测试连接" : "新模型已创建");
   }
   if (action === "generate-look") {
     const look = runtime.looks.find((item) => item.id === button.dataset.lookId);

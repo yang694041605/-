@@ -110,6 +110,84 @@ test("每个模型类别只有一个默认项", async () => {
   }
 });
 
+test("模型配置接口支持新增、编辑、测试、设默认和删除", async () => {
+  const { child, base, temp } = await startTestServer();
+  try {
+    const schemaPayload = await (await fetch(`${base}/api/models`)).json();
+    assert.ok(schemaPayload.schema.categories.length >= 7);
+
+    const invalid = await fetch(`${base}/api/models`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category: "video",
+        provider: "pollinations",
+        label: "错误模型",
+        model: "x",
+        parameters: {}
+      })
+    });
+    assert.equal(invalid.status, 400);
+
+    const createdResponse = await fetch(`${base}/api/models`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category: "music",
+        provider: "xying-original",
+        label: "验收模型",
+        model: "acceptance-score",
+        enabled: true,
+        isDefault: false,
+        parameters: { tempo: 88, mood: "bright-romantic" }
+      })
+    });
+    const createdText = await createdResponse.text();
+    assert.equal(createdResponse.status, 201, createdText);
+    const created = JSON.parse(createdText).item;
+
+    const updatedResponse = await fetch(`${base}/api/models/${created.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...created,
+        label: "验收模型 v2",
+        parameters: { tempo: 92 }
+      })
+    });
+    assert.equal(updatedResponse.status, 200);
+    const updated = (await updatedResponse.json()).item;
+    assert.equal(updated.label, "验收模型 v2");
+    assert.equal(updated.parameters.tempo, 92);
+
+    const testedResponse = await fetch(`${base}/api/models/${created.id}/test`, {
+      method: "POST"
+    });
+    assert.equal(testedResponse.status, 200);
+    assert.equal((await testedResponse.json()).result.ok, true);
+
+    const defaultResponse = await fetch(
+      `${base}/api/models/${created.id}/default`,
+      { method: "POST" }
+    );
+    assert.equal(defaultResponse.status, 200);
+    const afterDefault = await (await fetch(`${base}/api/models`)).json();
+    const musicModels = afterDefault.items.filter((model) => model.category === "music");
+    assert.equal(musicModels.filter((model) => model.isDefault).length, 1);
+    assert.equal(musicModels.find((model) => model.isDefault).id, created.id);
+
+    const deleted = await fetch(`${base}/api/models/${created.id}`, {
+      method: "DELETE"
+    });
+    assert.equal(deleted.status, 200);
+    const afterDelete = await (await fetch(`${base}/api/models`)).json();
+    const remainingMusic = afterDelete.items.filter((model) => model.category === "music");
+    assert.equal(remainingMusic.filter((model) => model.isDefault).length, 1);
+  } finally {
+    await stopTestServer(child, temp);
+  }
+});
+
 test("渲染与生成接口拒绝浏览器提交文件路径", async () => {
   const { child, base, temp } = await startTestServer();
   try {

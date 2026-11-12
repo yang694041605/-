@@ -71,6 +71,11 @@ import {
   sliceSrt,
   transcriptToSrt
 } from "./remix.mjs";
+import {
+  chooseDefaultModel,
+  normalizeModelConfiguration,
+  schemaForClient
+} from "./model-registry.mjs";
 
 seedDefaults();
 migrateProjectRecords();
@@ -870,16 +875,135 @@ async function handleApi(request, response, url) {
   }
 
   if (path === "/api/models" && method === "GET") {
-    return sendJson(response, 200, { ok: true, items: listEntities("model") });
+    return sendJson(response, 200, {
+      ok: true,
+      items: listEntities("model"),
+      schema: schemaForClient()
+    });
+  }
+
+  if (path === "/api/models" && method === "POST") {
+    const body = await readJson(request);
+    let configuration;
+    try {
+      configuration = normalizeModelConfiguration(body);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
+    const categoryModels = listEntities("model", 1000).filter(
+      (model) => model.category === configuration.category
+    );
+    const shouldDefault =
+      configuration.isDefault || categoryModels.length === 0;
+    const modelId = id("model");
+    const created = saveEntity(
+      "model",
+      {
+        ...configuration,
+        id: modelId,
+        isDefault: shouldDefault,
+        status: configuration.status || "unverified",
+        createdAt: new Date().toISOString()
+      },
+      modelId
+    );
+    if (shouldDefault) {
+      for (const peer of categoryModels) {
+        updateEntity("model", peer.id, { isDefault: false });
+      }
+    }
+    return sendJson(response, 201, { ok: true, item: created });
   }
 
   const modelMatch = path.match(/^\/api\/models\/([^/]+)$/);
   if (modelMatch && method === "PUT") {
     const body = await readJson(request);
-    const updated = updateEntity("model", modelMatch[1], body);
+    const existing = getEntity("model", modelMatch[1]);
+    if (!existing) return sendJson(response, 404, { ok: false, error: "模型配置不存在" });
+    let configuration;
+    try {
+      configuration = normalizeModelConfiguration(body, existing);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
+    const connectionChanged =
+      configuration.category !== existing.category ||
+      configuration.provider !== existing.provider ||
+      configuration.model !== existing.model ||
+      configuration.profile !== existing.profile;
+    const categoryModels = listEntities("model", 1000).filter(
+      (model) => model.category === configuration.category && model.id !== existing.id
+    );
+    const shouldDefault = configuration.isDefault || !categoryModels.some((model) => model.isDefault);
+    const updated = updateEntity("model", existing.id, {
+      ...configuration,
+      isDefault: shouldDefault,
+      ...(connectionChanged
+        ? {
+            status: "unverified",
+            lastError: null,
+            lastTest: null
+          }
+        : {})
+    });
+    if (shouldDefault) {
+      for (const peer of categoryModels) {
+        updateEntity("model", peer.id, { isDefault: false });
+      }
+    }
+    if (existing.category !== configuration.category && existing.isDefault) {
+      const oldCategoryModels = listEntities("model", 1000).filter(
+        (model) => model.category === existing.category
+      );
+      const fallback = chooseDefaultModel(oldCategoryModels);
+      if (fallback && !oldCategoryModels.some((model) => model.isDefault)) {
+        updateEntity("model", fallback.id, { isDefault: true });
+      }
+    }
     return updated
       ? sendJson(response, 200, { ok: true, item: updated })
       : sendJson(response, 404, { ok: false, error: "模型配置不存在" });
+  }
+
+  if (modelMatch && method === "DELETE") {
+    const model = getEntity("model", modelMatch[1]);
+    if (!model) return sendJson(response, 404, { ok: false, error: "模型配置不存在" });
+    const activeJob = listEntities("job", 1000).find(
+      (job) =>
+        job.modelId === model.id &&
+        !["succeeded", "failed", "cancelled", "unknown"].includes(job.status)
+    );
+    if (activeJob) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: `模型仍有运行中任务 ${activeJob.id}，不能删除`
+      });
+    }
+    deleteEntity("model", model.id);
+    const remaining = listEntities("model", 1000).filter(
+      (item) => item.category === model.category
+    );
+    if (model.isDefault && remaining.length) {
+      const fallback = chooseDefaultModel(remaining);
+      if (fallback) updateEntity("model", fallback.id, { isDefault: true });
+    }
+    return sendJson(response, 200, { ok: true, item: model });
+  }
+
+  const modelDefaultMatch = path.match(/^\/api\/models\/([^/]+)\/default$/);
+  if (modelDefaultMatch && method === "POST") {
+    const model = getEntity("model", modelDefaultMatch[1]);
+    if (!model) return sendJson(response, 404, { ok: false, error: "模型配置不存在" });
+    const peers = listEntities("model", 1000).filter(
+      (item) => item.category === model.category
+    );
+    for (const peer of peers) {
+      updateEntity("model", peer.id, { isDefault: peer.id === model.id });
+    }
+    return sendJson(response, 200, {
+      ok: true,
+      item: getEntity("model", model.id)
+    });
   }
 
   const modelTestMatch = path.match(/^\/api\/models\/([^/]+)\/test$/);

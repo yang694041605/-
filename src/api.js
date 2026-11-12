@@ -119,6 +119,21 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(patch)
     }),
+  getModels: () => request("/api/models"),
+  createModel: (model) =>
+    request("/api/models", {
+      method: "POST",
+      body: JSON.stringify(model)
+    }),
+  deleteModel: (modelId) =>
+    request(`/api/models/${encodeURIComponent(modelId)}`, {
+      method: "DELETE"
+    }),
+  setDefaultModel: (modelId) =>
+    request(`/api/models/${encodeURIComponent(modelId)}/default`, {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
   testModel: (modelId) =>
     request(`/api/models/${encodeURIComponent(modelId)}/test`, { method: "POST" }),
   generateText: (payload) =>
