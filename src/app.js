@@ -349,6 +349,18 @@ const NAV_TREE = [
     ]
   },
   {
+    id: "douyin-remix-flow",
+    label: "抖音复刻",
+    symbol: "复",
+    route: "remix",
+    children: [
+      { id: "remix-step-01", label: "01 下载与全帧提取", route: "remixStep1" },
+      { id: "remix-step-02", label: "02 画面声音字幕分析", route: "remixStep2" },
+      { id: "remix-step-03", label: "03 人物目标与逐镜替换", route: "remixStep3" },
+      { id: "remix-step-04", label: "04 时间轴封装与交付", route: "remixStep4" }
+    ]
+  },
+  {
     id: "template-resource",
     label: "模板库",
     symbol: "模",
@@ -383,6 +395,11 @@ const NAV_TREE = [
 const ROUTE_META = {
   overview: ["项目工作台", "把真实故事，拍成只属于你们的一部电影"],
   wizard: ["14 步婚礼电影向导", "每一步都有明确素材、人工确认和下一步，不会一次盲渲染到底"],
+  remix: ["抖音模板复刻", "下载参考片、按 24 FPS 提取、明确替换人物，再按当前镜头时间轴封装"],
+  remixStep1: ["01 下载与全帧提取", "保存原片、封面、24 FPS 全帧索引和原始音频"],
+  remixStep2: ["02 画面声音字幕分析", "提取逐镜画面语义、声音段落、字幕线索和提示词结构"],
+  remixStep3: ["03 人物目标与逐镜替换", "明确替换左侧、右侧或编号人物，逐镜生成并审核"],
+  remixStep4: ["04 时间轴封装与交付", "只合成当前已批准镜头，保留原声音结构与试听交付"],
   templates: ["风格模板库", "上传本地视频或解析抖音链接，把参考片变成可编辑的模板配方"],
   story: ["故事共创", "从一个真实细节出发，让剧情有来处、有情绪、有落点"],
   characters: ["人物设定", "锁定男女主的脸、气质与服装，保证每个镜头都是同一个人"],
@@ -525,6 +542,13 @@ for (const step of WIZARD_STEPS) {
   ];
 }
 
+const REMIX_STEPS = [
+  { number: 1, title: "下载与全帧提取", subtitle: "24 FPS 全帧、原始音频和帧索引", route: "remixStep1" },
+  { number: 2, title: "画面声音字幕分析", subtitle: "逐镜画面、声音、字幕和提示词结构", route: "remixStep2" },
+  { number: 3, title: "人物目标与逐镜替换", subtitle: "明确人物后逐镜生成和人工审核", route: "remixStep3" },
+  { number: 4, title: "时间轴封装与交付", subtitle: "当前镜头时间线、声音字幕和预览", route: "remixStep4" }
+];
+
 const VVV_STYLE_PRESETS = [
   {
     id: "album",
@@ -588,6 +612,7 @@ let state = loadState();
 let activeRouteInfo = parseRouteHash(window.location.hash);
 let activeRoute = routeNameFromInfo(activeRouteInfo);
 let activeFocus = null;
+let remixSelectedShotId = "";
 let selectedMusicMood = "warm-cinematic";
 let openNavIds = new Set([
   "guide-14-steps",
@@ -644,14 +669,22 @@ function saveState({ quiet = false } = {}) {
           storyBeats: state.storyBeats,
           duration: state.duration,
           referenceDuration: state.referenceDuration,
+          storyDuration: state.storyDuration,
+          remixDuration: state.remixDuration,
           theme: state.theme,
           tone: state.tone,
           aspect: state.aspect,
           treatment,
           storyboard,
+          ...(state.mode === "remix"
+            ? { remixStoryboard: storyboard }
+            : { storyStoryboard: storyboard }),
           photoAssetIds: state.photoAssetIds,
           selectedLooks: state.selectedLooks,
           workflow: state.workflow,
+          remixWorkflow: state.remixWorkflow,
+          remixTargets: state.remixTargets,
+          remixRange: state.remixRange,
           vvvStyle: state.vvvStyle
         })
         .catch(() => {});
@@ -680,17 +713,31 @@ async function refreshRuntime({ rerender = true } = {}) {
       runtime.projects.find((item) => item.id === currentProjectId) || runtime.projects[0];
     if (project) {
       currentProjectId = project.id;
+      const explicitRouteMode =
+        activeRouteInfo.page === "remix"
+          ? "remix"
+          : activeRouteInfo.page === "story" || /^step\d+$/.test(activeRoute)
+            ? "story"
+            : "";
+      const effectiveMode =
+        explicitRouteMode || project.mode || state.mode || "story";
+      const activeDuration =
+        effectiveMode === "remix"
+          ? Number(project.remixDuration || project.remixRange?.end - project.remixRange?.start || project.duration || 40)
+          : Number(project.storyDuration || project.duration || 40);
       state = normalizeProject({
         ...state,
         projectName: project.name || state.projectName,
-        mode: project.mode || state.mode,
+        mode: effectiveMode,
         groom: project.groom || state.groom,
         bride: project.bride || state.bride,
         date: project.weddingDate || state.date,
         city: project.city || state.city,
         story: project.story || state.story,
         storyBeats: project.storyBeats || state.storyBeats,
-        duration: project.duration || state.duration,
+        duration: activeDuration,
+        storyDuration: Number(project.storyDuration || project.duration || state.storyDuration || 40),
+        remixDuration: Number(project.remixDuration || state.remixDuration || 0),
         referenceDuration:
           project.referenceDuration || state.referenceDuration || 0,
         theme: project.theme || state.theme,
@@ -704,13 +751,26 @@ async function refreshRuntime({ rerender = true } = {}) {
         photoSources: project.photoSources || state.photoSources,
         selectedLooks: project.selectedLooks || state.selectedLooks,
         workflow: project.workflow || state.workflow,
+        remixWorkflow: project.remixWorkflow || state.remixWorkflow,
+        remixTargets: project.remixTargets || state.remixTargets,
+        remixRange: project.remixRange || state.remixRange,
         timelineRevision: project.timelineRevision || state.timelineRevision,
         vvvStyle: project.vvvStyle || state.vvvStyle
       });
       treatment = buildStoryTreatment(state);
       storyboard = buildStoryboard(state);
       if (project.treatment) treatment = project.treatment;
-      if (Array.isArray(project.storyboard) && project.storyboard.length) {
+      const routedStoryboard =
+        effectiveMode === "remix"
+          ? project.remixStoryboard
+          : project.storyStoryboard;
+      if (Array.isArray(routedStoryboard) && routedStoryboard.length) {
+        storyboard = routedStoryboard;
+      } else if (
+        (project.mode || "story") === effectiveMode &&
+        Array.isArray(project.storyboard) &&
+        project.storyboard.length
+      ) {
         storyboard = project.storyboard;
       }
       const template = runtime.templates.find((item) => item.id === project.templateId);
@@ -837,7 +897,19 @@ function navigateTo(route, { replace = false } = {}) {
 function restoreRouteFromHash() {
   activeRouteInfo = routeInfoFromHash();
   activeRoute = activeRouteInfo.route;
-  if (activeRouteInfo.mode === "remix") state.mode = "remix";
+  if (activeRouteInfo.page === "remix" || activeRouteInfo.page === "story") {
+    state.mode = activeRouteInfo.mode;
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    if (project) {
+      const candidate =
+        state.mode === "remix" ? project.remixStoryboard : project.storyStoryboard;
+      if (Array.isArray(candidate) && candidate.length) storyboard = candidate;
+      state.duration =
+        state.mode === "remix"
+          ? Number(project.remixDuration || state.remixDuration || state.duration)
+          : Number(project.storyDuration || state.storyDuration || state.duration);
+    }
+  }
   render();
 }
 
@@ -892,8 +964,12 @@ function getView(route) {
     ...Object.fromEntries(
       WIZARD_STEPS.map((step) => [step.route, () => workflowStepPage(step.number)])
     ),
+    ...Object.fromEntries(
+      REMIX_STEPS.map((step) => [step.route, () => remixStepPage(step.number)])
+    ),
     overview: overviewPage,
     wizard: wizardPage,
+    remix: remixOverviewPage,
     templates: templatesPage,
     models: modelCenterPage,
     story: storyPage,
@@ -971,6 +1047,7 @@ function overviewPage() {
           <p>输入姓名、人物照片与爱情故事，完成模板解析、叙事、定妆、分镜、图片视频生成、语音配乐和本地成片合成。</p>
           <div class="hero-actions">
             <button class="button primary" data-route="wizard">${icon("sparkle")}开始 14 步制作</button>
+            <button class="button secondary" data-route="remix">${icon("play")}抖音模板复刻</button>
             <button class="button ghost" data-route="assets">打开素材中心${icon("arrow")}</button>
           </div>
           <div class="hero-stats">
@@ -1069,6 +1146,151 @@ function overviewPage() {
       </div>
     </div>
   `;
+}
+
+function currentRemixTemplate() {
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  return (
+    runtime.templates.find((item) => item.id === project?.templateId) ||
+    runtime.templates[0] ||
+    null
+  );
+}
+
+function remixReady(stepNumber) {
+  const template = currentRemixTemplate();
+  if (stepNumber === 1) {
+    return Boolean(template?.remixExtraction?.totalFrames);
+  }
+  if (stepNumber === 2) {
+    return Boolean(template?.remixAnalysis);
+  }
+  if (stepNumber === 3) {
+    const expected = Math.min(8, storyboard.length);
+    const approved = storyboard.filter(
+      (shot) =>
+        shot.status === "approved" &&
+        shotReviewComplete(shot.review) &&
+        shot.assets?.video?.assetId
+    ).length;
+    return expected > 0 && approved >= expected;
+  }
+  if (stepNumber === 4) {
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    const since = project?.lastRemixApprovalAt || "";
+    return runtime.assets.some(
+      (asset) =>
+        asset.kind === "export" &&
+        asset.projectId === currentProjectId &&
+        (!since || String(asset.createdAt || "") >= since)
+    );
+  }
+  return false;
+}
+
+function remixOverviewPage() {
+  const template = currentRemixTemplate();
+  const extraction = template?.remixExtraction;
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  return `
+    <div class="page">
+      ${pageHeader("remix")}
+      <div class="content-grid">
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>抖音视频人物替换</h2><p>原片负责节奏，角色和成片由当前项目重新生成</p></div><span class="badge ${extraction ? "green" : "gold"}">${extraction ? `${extraction.totalFrames} 帧` : "待提取"}</span></div>
+          <div class="checklist">
+            ${REMIX_STEPS.map((step) => `<button class="check-item" data-route="${step.route}" style="text-align:left;border:0;background:transparent;"><span class="check-icon">${String(step.number).padStart(2, "0")}</span><div class="check-copy"><strong>${esc(step.title)}</strong><small>${esc(step.subtitle)}</small></div></button>`).join("")}
+          </div>
+        </section>
+        <section class="card card-pad">
+          <div class="section-title"><div><h3>当前参考片</h3><p>${template ? esc(template.title) : "尚未导入模板"}</p></div></div>
+          ${template ? `<div class="summary-meta"><div class="summary-meta-item"><span>原片时长</span><strong>${Number(template.duration || 0).toFixed(1)} 秒</strong></div><div class="summary-meta-item"><span>全帧提取</span><strong>${extraction?.totalFrames ? `${extraction.totalFrames} / ${extraction.expectedFrames} 帧` : "尚未执行"}</strong></div><div class="summary-meta-item"><span>复刻成片</span><strong>${Number(project?.duration || 0).toFixed(1)} 秒</strong></div></div>` : '<p class="small muted">请先在模板库上传视频或解析抖音链接。</p>'}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button class="button primary" data-route="remixStep1">进入四步复刻</button><button class="button ghost" data-route="templates">打开模板库</button></div>
+        </section>
+      </div>
+    </div>`;
+}
+
+function remixStepPage(number) {
+  const step = REMIX_STEPS[number - 1];
+  const ready = remixReady(number);
+  const approved = Boolean(state.remixWorkflow?.approvals?.[number]);
+  return `
+    <div class="page">
+      ${pageHeader(step.route)}
+      <section class="step-context card">
+        <div class="step-context-index">${String(number).padStart(2, "0")}</div>
+        <div class="step-context-copy"><small>抖音复刻 · 第 ${number} / 4 步</small><strong>${esc(step.title)}</strong><span>${esc(step.subtitle)}</span></div>
+        <span class="badge ${approved ? "green" : ready ? "gold" : "gray"}">${approved ? "已确认" : ready ? "可确认" : "等待当前步骤材料"}</span>
+        <button class="button ghost small-button" data-route="remix">返回复刻总览</button>
+      </section>
+      ${remixStepContent(number)}
+      <section class="step-confirm card">
+        <div><strong>${ready ? "当前复刻步骤条件已满足" : "当前复刻步骤仍有缺口"}</strong><p>确认只绑定当前项目、当前镜头和当前时间轴版本。</p></div>
+        <div class="step-confirm-actions">
+          ${number > 1 ? `<button class="button ghost small-button" data-route="remixStep${number - 1}">上一步</button>` : ""}
+          <button class="button primary" data-action="approve-workflow-step" data-approval-step="${number}" data-approval-mode="remix" ${ready ? "" : "disabled"}>${icon("arrow")}确认并进入第 ${Math.min(4, number + 1)} 步</button>
+        </div>
+      </section>
+    </div>`;
+}
+
+function remixStepContent(number) {
+  const template = currentRemixTemplate();
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  const extraction = template?.remixExtraction;
+  const analysis = template?.remixAnalysis;
+  const remixShots = storyboard;
+  const selected =
+    remixShots.find((shot) => shot.id === remixSelectedShotId) ||
+    remixShots[0] ||
+    null;
+  if (number === 1) {
+    return `<div class="content-grid">
+      <section class="card card-pad"><div class="section-title"><div><h2>参考片与全帧提取</h2><p>一秒固定提取 24 帧，同时保留独立原音频</p></div><span class="badge ${extraction ? "green" : "gold"}">${extraction ? "已提取" : "等待提取"}</span></div>
+        ${template ? `<div class="summary-meta"><div class="summary-meta-item"><span>模板</span><strong>${esc(template.title)}</strong></div><div class="summary-meta-item"><span>分辨率</span><strong>${template.aspect || "未知"}</strong></div><div class="summary-meta-item"><span>原片时长</span><strong>${Number(template.duration || 0).toFixed(1)} 秒</strong></div></div><button class="button primary" style="width:100%;margin-top:16px;" data-action="remix-extract" data-template-id="${template.id}">${icon("sparkle")}${extraction ? "重新提取 24 FPS 全帧" : "开始 24 FPS 全帧提取"}</button>` : '<p class="small muted">模板库还没有已下载的视频。</p><button class="button primary" data-route="templates">前往模板库</button>'}
+      </section>
+      <section class="card card-pad"><div class="section-title"><div><h3>提取结果</h3><p>全帧不等于逐帧视觉模型调用，先建立可追溯索引</p></div></div>${extraction ? `<div class="checklist"><div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>${extraction.totalFrames} 帧</strong><small>${extraction.fps} FPS · ${extraction.durationTimecode}</small></div></div><div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>原始音频</strong><small>${extraction.audioUrl ? "已保存独立 WAV" : "缺失"}</small></div></div><div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>帧索引</strong><small>${extraction.indexUrl ? "frame-index.json 已生成" : "缺失"}</small></div></div></div>` : '<div class="empty-state"><div><div class="empty-state-symbol">帧</div><h3>尚未提取</h3><p>导入抖音视频后，从这里开始。</p></div></div>'}
+      </section>
+    </div>`;
+  }
+  if (number === 2) {
+    return `<div class="content-grid">
+      <section class="card card-pad"><div class="section-title"><div><h2>逐镜结构分析</h2><p>画面语义、声音转写、字幕线索和提示词结构分开记录</p></div><span class="badge ${analysis ? "green" : "gold"}">${analysis ? "已完成" : "等待分析"}</span></div><button class="button primary" style="width:100%;" data-action="remix-analyze" data-template-id="${template?.id || ""}" ${extraction ? "" : "disabled"}>${icon("sparkle")}${analysis ? "重新分析当前模板" : "开始分析画面与声音"}</button></section>
+      <section class="card card-pad"><div class="section-title"><div><h3>分析摘要</h3><p>模型不可用时会明确保留缺口，不伪装成完整成功</p></div></div>${analysis ? `<div class="summary-meta"><div class="summary-meta-item"><span>镜头</span><strong>${analysis.shots?.length || 0} 个</strong></div><div class="summary-meta-item"><span>转写</span><strong>${analysis.audio?.transcript?.length || 0} 段</strong></div><div class="summary-meta-item"><span>人物目标</span><strong>${analysis.targetCandidates?.length || 0} 类</strong></div></div>${analysis.warnings?.length ? `<div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>仍有分析缺口</strong>${analysis.warnings.map(esc).join("<br />")}</div></div>` : ""}` : '<div class="empty-state"><div><div class="empty-state-symbol">析</div><h3>尚未分析</h3><p>先完成全帧和原音频提取。</p></div></div>'}
+      </section>
+    </div>`;
+  }
+  if (number === 3) {
+    const targetOptions = (value) => ["left", "right", "person-1", "person-2", "person-3", "person-4"].map((target) => `<option value="${target}" ${value === target ? "selected" : ""}>${target === "left" ? "左侧人物" : target === "right" ? "右侧人物" : `人物 ${target.split("-")[1]}`}</option>`).join("");
+    const review = selected?.review || {};
+    const qcItems = [
+      ["identity", "身份一致"],
+      ["crossFace", "无串脸"],
+      ["hands", "手部正确"],
+      ["actionMatch", "动作匹配"],
+      ["backgroundDrift", "背景稳定"],
+      ["blackBars", "无黑边"],
+      ["subtitleSafety", "字幕安全"],
+      ["audioSync", "音画同步"]
+    ];
+    return `<div class="stack">
+      <section class="card card-pad"><div class="section-title"><div><h2>明确替换哪个人物</h2><p>先绑定角色，再逐镜生成；同一个目标不能分给男女主两人</p></div><span class="badge gold">${remixShots.length} 镜</span></div>
+        <div class="project-brief"><div class="field"><label>男主角替换目标</label><select class="select" data-remix-groom-target>${targetOptions(project?.remixTargets?.groom || "left")}</select></div><div class="field"><label>女主角替换目标</label><select class="select" data-remix-bride-target>${targetOptions(project?.remixTargets?.bride || "right")}</select></div><div class="field"><label>参考片开始秒</label><input class="input" type="number" min="0" step="0.1" data-remix-range-start value="${esc(project?.remixRange?.start ?? Math.max(0, Number(template?.duration || 40) - 40))}" /></div><div class="field"><label>参考片结束秒</label><input class="input" type="number" min="0.5" step="0.1" data-remix-range-end value="${esc(project?.remixRange?.end ?? template?.duration ?? 40)}" /></div></div>
+        <button class="button primary" style="margin-top:14px;" data-action="save-remix-targets" data-template-id="${template?.id || ""}" ${analysis ? "" : "disabled"}>${icon("shield")}保存人物目标与复刻区间</button>
+      </section>
+      <section class="card card-pad"><div class="section-title"><div><h2>逐镜人物替换</h2><p>每个镜头使用自己的模板区间和提示词版本</p></div></div>
+        ${selected ? `<div class="project-brief"><div class="field"><label>当前镜头</label><select class="select" data-shot-select>${remixShots.map((shot) => `<option value="${shot.id}" ${shot.id === selected.id ? "selected" : ""}>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒 · ${shot.status}</option>`).join("")}</select></div><div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div></div><textarea class="textarea" data-video-prompt style="min-height:190px;margin-top:12px;">${esc(buildReplacementPrompt(selected))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button ghost small-button" data-action="build-replacement-prompt">重新生成提示词</button><button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>提交当前镜头替换</button></div>` : '<p class="small muted">请先保存人物目标与复刻区间，系统会建立最多 8 个连续镜头。</p>'}
+      </section>
+      ${selected ? `<section class="card card-pad"><div class="section-title"><div><h2>镜头 ${String(selected.order).padStart(2, "0")} 人工质检</h2><p>技术生成成功不等于人工审核通过</p></div><span class="badge ${shotReviewComplete(review) ? "green" : "gray"}">${shotReviewComplete(review) ? "已通过" : "待复核"}</span></div><div class="checklist">${qcItems.map(([key, label]) => `<label class="check-item"><input type="checkbox" data-qc-check="${key}" ${review[key] === "passed" ? "checked" : ""} /><div class="check-copy"><strong>${label}</strong><small>${review[key] === "passed" ? "已通过" : "请实际观看后确认"}</small></div></label>`).join("")}</div><button class="button primary" style="width:100%;margin-top:14px;" data-action="save-shot-qc" data-shot-id="${selected.id}">保存本镜人工审核</button></section>` : ""}
+    </div>`;
+  }
+  const exports = runtime.assets.filter((asset) => asset.kind === "export");
+  const approvedShots = remixShots.filter((shot) => shot.status === "approved").length;
+  return `<div class="content-grid">
+    <section class="card card-pad"><div class="section-title"><div><h2>封装当前复刻时间轴</h2><p>${state.duration} 秒 · ${Math.round(state.duration * 24)} 帧 · ${approvedShots}/${remixShots.length} 镜已批准</p></div><span class="badge ${approvedShots === remixShots.length && remixShots.length ? "green" : "gray"}">${approvedShots === remixShots.length && remixShots.length ? "可成片" : "等待逐镜审核"}</span></div><div class="notice red">${icon("shield")}<div><strong>只合成当前批准镜头</strong>原始声音按所选参考区间进入时间轴；字幕未通过安全校验时不允许交付。</div></div><textarea class="textarea" data-speech-text style="min-height:100px;margin-top:14px;">${esc((analysis?.audio?.transcript || []).map((item) => item.text || item).join("。"))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="button secondary" data-action="generate-subtitles">生成当前字幕</button><button class="button primary" data-action="render-project">${icon("play")}生成当前时间轴成片</button></div></section>
+    <section class="card card-pad"><div class="section-title"><div><h3>最近成片</h3><p>正式交付前请完整观看</p></div></div>${renderVideoAssets(exports.slice(0,4))}</section>
+  </div>`;
 }
 
 function workflowReady(stepNumber) {
@@ -2573,7 +2795,14 @@ function bindCurrentView() {
       backgroundPolicy?.value || "keep"
     );
   };
-  shotSelect?.addEventListener("change", syncPrompt);
+  shotSelect?.addEventListener("change", () => {
+    remixSelectedShotId = shotSelect.value;
+    if (activeRouteInfo.mode === "remix") {
+      render();
+      return;
+    }
+    syncPrompt();
+  });
   backgroundPolicy?.addEventListener("change", syncPrompt);
 }
 
@@ -2727,7 +2956,8 @@ async function handleAction(button) {
       showToast("请先启动本地服务，确认记录必须写入服务端版本库");
       return;
     }
-    if (!workflowReady(step)) {
+    const stepReady = mode === "remix" ? remixReady(step) : workflowReady(step);
+    if (!stepReady) {
       showToast("本步骤素材尚未就绪，请先完成素材中心要求");
       return;
     }
@@ -2744,7 +2974,11 @@ async function handleAction(button) {
       confirmText: "确认当前版本",
       evidence: `制作方在${mode === "remix" ? "抖音复刻" : "故事"}第 ${step} 步页面确认`
     });
-    state.workflow = result.item.workflow;
+    if (mode === "remix") {
+      state.remixWorkflow = result.workflow || result.item.remixWorkflow;
+    } else {
+      state.workflow = result.workflow || result.item.workflow;
+    }
     state.mode = result.item.mode || mode;
     saveState({ quiet: true });
     const nextStep = Math.min(maxStep + 1, step + 1);
@@ -2871,6 +3105,70 @@ async function handleAction(button) {
     await trackJob(result.job.id, "视频生成");
     await refreshRuntime();
   }
+  if (action === "remix-extract") {
+    const templateId = button.dataset.templateId;
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    if (!templateId) {
+      showToast("请先导入抖音视频模板");
+      return;
+    }
+    if (project?.templateId !== templateId) {
+      await api.applyTemplate(templateId, currentProjectId);
+    }
+    const result = await api.extractRemixFrames(templateId);
+    await trackJob(result.job.id, "抖音全帧提取");
+    await refreshRuntime();
+    showToast("24 FPS 全帧、原音频和帧索引已完成");
+  }
+  if (action === "remix-analyze") {
+    const templateId = button.dataset.templateId || currentRemixTemplate()?.id;
+    if (!templateId) {
+      showToast("请先选择并提取参考片");
+      return;
+    }
+    const result = await api.analyzeRemixTemplate(templateId);
+    await trackJob(result.job.id, "抖音画面声音字幕分析");
+    await refreshRuntime();
+  }
+  if (action === "save-remix-targets") {
+    const groom = document.querySelector("[data-remix-groom-target]")?.value;
+    const bride = document.querySelector("[data-remix-bride-target]")?.value;
+    const start = Number(document.querySelector("[data-remix-range-start]")?.value);
+    const end = Number(document.querySelector("[data-remix-range-end]")?.value);
+    const result = await api.updateRemixTargets(currentProjectId, {
+      templateId: button.dataset.templateId || currentRemixTemplate()?.id,
+      groom,
+      bride,
+      remixRange: { start, end }
+    });
+    state.mode = "remix";
+    state.remixTargets = { groom, bride };
+    state.remixRange = result.item.remixRange;
+    storyboard = result.shots || [];
+    remixSelectedShotId = storyboard[0]?.id || "";
+    await refreshRuntime();
+    showToast(`已建立 ${storyboard.length} 个连续替换镜头`);
+  }
+  if (action === "save-shot-qc") {
+    const shot = storyboard.find((item) => item.id === button.dataset.shotId);
+    if (!shot) return;
+    const checks = {};
+    document.querySelectorAll("[data-qc-check]").forEach((input) => {
+      checks[input.dataset.qcCheck] = input.checked ? "passed" : "pending";
+    });
+    const passed = shotReviewComplete(checks);
+    await api.updateShot(currentProjectId, shot.id, {
+      mode: "remix",
+      review: {
+        ...checks,
+        reviewedBy: "producer",
+        reviewedAt: new Date().toISOString()
+      },
+      status: passed ? "approved" : "human-review"
+    });
+    await refreshRuntime();
+    showToast(passed ? "本镜八项人工质检已通过" : "本镜仍有质检项未通过");
+  }
   if (action === "generate-template-shot") {
     const project = runtime.projects.find((item) => item.id === currentProjectId);
     const template = runtime.templates.find((item) => item.id === project?.templateId);
@@ -2913,6 +3211,7 @@ async function handleAction(button) {
       `reference_image:${photoAssetIds.bride}`
     ];
     await api.updateShot(currentProjectId, selectedShot.id, {
+      mode: state.mode || activeRouteInfo.mode || "story",
       prompt,
       source: {
         ...(selectedShot.source || {}),
@@ -2945,6 +3244,7 @@ async function handleAction(button) {
     const job = await trackJob(result.job.id, "模板人物替换镜头");
     if (job?.result?.asset) {
       await api.updateShot(currentProjectId, selectedShot.id, {
+        mode: state.mode || activeRouteInfo.mode || "story",
         assets: {
           ...(selectedShot.assets || {}),
           video: {
@@ -3242,11 +3542,15 @@ async function handleAction(button) {
     showToast("SRT 字幕已保存到资产库");
   }
   if (action === "render-project") {
-    const timelineResult = await api.getProjectTimeline(currentProjectId);
+    const timelineResult = await api.getProjectTimeline(
+      currentProjectId,
+      state.mode || "story"
+    );
     const timeline = timelineResult.item;
     button.disabled = true;
     button.textContent = "正在合成成片…";
     const result = await api.renderProductionTimeline(currentProjectId, {
+      mode: state.mode || "story",
       timelineHash: timeline.hash
     });
     await trackJob(result.job.id, "当前时间轴成片合成");

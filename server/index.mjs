@@ -33,6 +33,7 @@ import {
   renderTimeline,
   runAdvancedMediaCheck,
   sceneCutsToShots,
+  transcribeWithWhisper,
   verifyMedia
 } from "./media.mjs";
 import { synthesizeSapi, synthesizeVoice } from "./voice.mjs";
@@ -53,6 +54,13 @@ import {
   validateRenderTimeline
 } from "./production.mjs";
 import { splitSubtitleText } from "../src/production-model.mjs";
+import {
+  buildFrameExtractionPlan,
+  buildRemixShotPlan,
+  extractRemixFrames,
+  normalizeReplacementTargets,
+  resolveRemixRange
+} from "./remix.mjs";
 
 seedDefaults();
 migrateProjectRecords();
@@ -180,6 +188,11 @@ async function handleApi(request, response, url) {
     const project = saveEntity("project", {
       ...body,
       id: body.id || id("project"),
+      mode: body.mode === "remix" ? "remix" : "story",
+      storyDuration: Number(body.storyDuration || body.duration || 40),
+      remixDuration: Number(body.remixDuration || 0),
+      storyStoryboard: body.storyStoryboard || (body.mode !== "remix" ? body.storyboard || [] : []),
+      remixStoryboard: body.remixStoryboard || (body.mode === "remix" ? body.storyboard || [] : []),
       status: body.status || "draft"
     });
     return sendJson(response, 201, { ok: true, item: project });
@@ -209,18 +222,24 @@ async function handleApi(request, response, url) {
   if (projectTimelineMatch && method === "GET") {
     const project = getEntity("project", projectTimelineMatch[1]);
     if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const requestedMode = url.searchParams.get("mode") || project.mode || "story";
+    const projectView = projectForMode(project, requestedMode);
     const assets = projectAssets(project.id);
     const timeline = buildProjectTimeline(
-      project,
+      projectView,
       assets,
       Number(project.timelineRevision) || 1
     );
     return sendJson(response, 200, {
       ok: true,
       item: timeline,
-      approvalSnapshot: approvalSnapshot(project, assets, {
-        mode: project.mode || "story",
-        step: Number(project.workflow?.currentStep || 1)
+      approvalSnapshot: approvalSnapshot(projectView, assets, {
+        mode: projectView.mode,
+        step: Number(
+          (projectView.mode === "remix"
+            ? project.remixWorkflow?.currentStep
+            : project.workflow?.currentStep) || 1
+        )
       })
     });
   }
@@ -230,9 +249,13 @@ async function handleApi(request, response, url) {
     const project = getEntity("project", projectRenderMatch[1]);
     if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
     const body = await readJson(request);
+    const projectView = projectForMode(
+      project,
+      body.mode || url.searchParams.get("mode") || project.mode
+    );
     const assets = projectAssets(project.id);
     const timeline = buildProjectTimeline(
-      project,
+      projectView,
       assets,
       Number(project.timelineRevision) || 1
     );
@@ -244,17 +267,21 @@ async function handleApi(request, response, url) {
     }
     let resolved;
     try {
-      resolved = validateRenderTimeline(project, timeline, assets);
+      resolved = validateRenderTimeline(projectView, timeline, assets);
     } catch (error) {
       return sendJson(response, 409, { ok: false, error: safeError(error) });
     }
     const voice = resolved.voiceAssets[0];
     const music = resolved.musicAssets[0];
     const subtitle = resolved.subtitleAssets[0];
+    const musicTrack = (timeline.tracks.music || []).find(
+      (track) => track.assetId === music?.id
+    );
     const job = createJob("timeline-render", {
       projectId: project.id,
       input: {
         title: project.name || "婚礼微电影",
+        mode: projectView.mode,
         duration: resolved.duration,
         fps: timeline.fps,
         width: 1280,
@@ -269,6 +296,7 @@ async function handleApi(request, response, url) {
         })),
         voicePath: voice?.localPath || "",
         musicPath: music?.localPath || "",
+        musicStart: Number(musicTrack?.sourceStart || 0),
         subtitlePath: subtitle?.localPath || "",
         autoMusic: !music,
         mood: project.musicMood || "warm-cinematic",
@@ -301,22 +329,38 @@ async function handleApi(request, response, url) {
       });
     }
     const assets = projectAssets(project.id);
-    const snapshot = approvalSnapshot(project, assets, { mode, step });
-    const workflow = approveStep(project, {
+    const projectView = projectForMode(project, mode);
+    const snapshot = approvalSnapshot(projectView, assets, { mode, step });
+    const workflowBase =
+      mode === "remix"
+        ? project.remixWorkflow || { currentStep: 1, approvals: {} }
+        : project.workflow || { currentStep: 1, approvals: {} };
+    const workflow = approveStep({ ...project, workflow: workflowBase }, {
       mode,
       step,
       snapshot,
       evidence: body.evidence
     });
-    const updated = updateEntity("project", project.id, {
-      workflow,
-      mode,
-      lastApprovalAt: new Date().toISOString()
-    });
+    const updated = updateEntity(
+      "project",
+      project.id,
+      mode === "remix"
+        ? {
+            remixWorkflow: workflow,
+            mode: "remix",
+            lastRemixApprovalAt: new Date().toISOString()
+          }
+        : {
+            workflow,
+            mode: "story",
+            lastApprovalAt: new Date().toISOString()
+          }
+    );
     return sendJson(response, 200, {
       ok: true,
       item: updated,
-      approval: workflow.approvals[step]
+      approval: workflow.approvals[step],
+      workflow
     });
   }
 
@@ -327,8 +371,17 @@ async function handleApi(request, response, url) {
     const project = getEntity("project", projectShotMatch[1]);
     if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
     const body = await readJson(request);
+    const mode = body.mode === "remix" ? "remix" : "story";
+    const sourceStoryboard =
+      mode === "remix"
+        ? project.remixStoryboard ||
+          (project.mode === "remix" ? project.storyboard : null) ||
+          []
+        : project.storyStoryboard ||
+          (project.mode !== "remix" ? project.storyboard : null) ||
+          [];
     const shotId = decodeURIComponent(projectShotMatch[2]);
-    const index = (project.storyboard || []).findIndex((shot) => shot.id === shotId);
+    const index = sourceStoryboard.findIndex((shot) => shot.id === shotId);
     if (index < 0) return sendJson(response, 404, { ok: false, error: "镜头不存在" });
     const current = project.storyboard[index];
     const patch = {};
@@ -351,16 +404,107 @@ async function handleApi(request, response, url) {
         text
       };
     }
-    const storyboard = project.storyboard.slice();
+    const storyboard = sourceStoryboard.slice();
     storyboard[index] = { ...current, ...patch };
     const updated = updateEntity("project", project.id, {
       storyboard,
+      ...(mode === "remix"
+        ? { remixStoryboard: storyboard }
+        : { storyStoryboard: storyboard }),
       timelineRevision: Number(project.timelineRevision || 1) + 1
     });
     return sendJson(response, 200, {
       ok: true,
       item: storyboard[index],
       project: updated
+    });
+  }
+
+  const projectRemixTargetsMatch = path.match(
+    /^\/api\/projects\/([^/]+)\/remix\/targets$/
+  );
+  if (projectRemixTargetsMatch && method === "PUT") {
+    const project = getEntity("project", projectRemixTargetsMatch[1]);
+    if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const body = await readJson(request);
+    let targets;
+    try {
+      targets = normalizeReplacementTargets(body);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
+    const template = getEntity("template", body.templateId || project.templateId);
+    if (!template) return sendJson(response, 409, { ok: false, error: "请先选择模板" });
+    if (!template.remixAnalysis) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "模板尚未完成画面、声音和提示词结构分析"
+      });
+    }
+    const remixRange = resolveRemixRange(template, {
+      remixRange: body.remixRange || project.remixRange
+    });
+    const effectiveRange = {
+      start: remixRange.start,
+      end: remixRange.start + remixRange.duration
+    };
+    const nextProject = {
+      ...project,
+      mode: "remix",
+      templateId: template.id,
+      remixTargets: targets,
+      remixRange: effectiveRange,
+      duration: remixRange.duration,
+      remixDuration: remixRange.duration,
+      storyDuration: Number(project.storyDuration || project.duration || 40),
+      referenceDuration: Number(template.duration || remixRange.duration),
+      durationSource: "remix-reference"
+    };
+    if (template.remixExtraction?.audioPath) {
+      const originalAudioAsset = saveEntity(
+        "asset",
+        {
+          id: `asset-remix-audio-${project.id}`,
+          kind: "music",
+          projectId: project.id,
+          ownerId: project.id,
+          templateId: template.id,
+          title: "抖音参考片原始声音",
+          localPath: template.remixExtraction.audioPath,
+          url: template.remixExtraction.audioUrl,
+          mimeType: "audio/wav",
+          contentHash: await sha256File(template.remixExtraction.audioPath).catch(() => ""),
+          version: 1,
+          source: "reference-video-audio"
+        },
+        `asset-remix-audio-${project.id}`
+      );
+      nextProject.timelineSelection = {
+        ...(project.timelineSelection || {}),
+        musicAssetId: originalAudioAsset.id
+      };
+    }
+    const storyboard = buildRemixShotPlan(template, nextProject);
+    const updated = updateEntity("project", project.id, {
+      mode: "remix",
+      templateId: template.id,
+      remixTargets: targets,
+      duration: nextProject.duration,
+      remixDuration: nextProject.remixDuration,
+      storyDuration: nextProject.storyDuration,
+      referenceDuration: nextProject.referenceDuration,
+      remixRange: effectiveRange,
+      timelineSelection: nextProject.timelineSelection || project.timelineSelection || {},
+      durationSource: nextProject.durationSource,
+      storyboard,
+      remixStoryboard: storyboard,
+      remixWorkflow: project.remixWorkflow || { currentStep: 1, approvals: {} },
+      timelineRevision: Number(project.timelineRevision || 1) + 1
+    });
+    return sendJson(response, 200, {
+      ok: true,
+      item: updated,
+      shots: storyboard
     });
   }
 
@@ -498,6 +642,36 @@ async function handleApi(request, response, url) {
       },
       asset
     });
+  }
+
+  const remixExtractMatch = path.match(/^\/api\/templates\/([^/]+)\/remix\/extract$/);
+  if (remixExtractMatch && method === "POST") {
+    const template = getEntity("template", remixExtractMatch[1]);
+    if (!template) return sendJson(response, 404, { ok: false, error: "模板不存在" });
+    const job = createJob("remix-extract", {
+      templateId: template.id,
+      input: { templateId: template.id, fps: 24 }
+    });
+    queueJob(job.id, () => extractRemixTemplate(template.id, job.id));
+    return sendJson(response, 202, { ok: true, job });
+  }
+
+  const remixAnalyzeMatch = path.match(/^\/api\/templates\/([^/]+)\/remix\/analyze$/);
+  if (remixAnalyzeMatch && method === "POST") {
+    const template = getEntity("template", remixAnalyzeMatch[1]);
+    if (!template) return sendJson(response, 404, { ok: false, error: "模板不存在" });
+    if (!template.remixExtraction?.totalFrames) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "请先完成 24 FPS 全帧提取和原音频提取"
+      });
+    }
+    const job = createJob("remix-analysis", {
+      templateId: template.id,
+      input: { templateId: template.id }
+    });
+    queueJob(job.id, () => analyzeRemixTemplate(template.id, job.id));
+    return sendJson(response, 202, { ok: true, job });
   }
 
   if (path === "/api/assets" && method === "GET") {
@@ -887,6 +1061,40 @@ function projectAssets(projectId) {
   );
 }
 
+function projectForMode(project, requestedMode = "") {
+  const mode =
+    requestedMode === "remix" || requestedMode === "story"
+      ? requestedMode
+      : project.mode === "remix"
+        ? "remix"
+        : "story";
+  const storyboard =
+    mode === "remix"
+      ? project.remixStoryboard ||
+        (project.mode === "remix" ? project.storyboard : null) ||
+        []
+      : project.storyStoryboard ||
+        (project.mode !== "remix" ? project.storyboard : null) ||
+        [];
+  const duration =
+    mode === "remix"
+      ? Number(
+          project.remixDuration ||
+            (project.remixRange
+              ? project.remixRange.end - project.remixRange.start
+              : 0) ||
+            project.duration ||
+            40
+        )
+      : Number(project.storyDuration || project.duration || 40);
+  return {
+    ...project,
+    mode,
+    storyboard,
+    duration
+  };
+}
+
 function resolveGenerationInputs(inputs, projectId = "") {
   if (!Array.isArray(inputs)) return [];
   return inputs.map((entry) => {
@@ -982,6 +1190,9 @@ function migrateProjectRecords() {
       !project.mode ||
       !project.timelineRevision ||
       !project.photoAssetIds ||
+      !project.storyDuration ||
+      project.storyStoryboard == null ||
+      project.remixStoryboard == null ||
       normalizedShots.some((shot, index) => shot.status !== shots[index]?.status)
     ) {
       updateEntity("project", project.id, {
@@ -994,6 +1205,18 @@ function migrateProjectRecords() {
           Number(project.referenceDuration || 0) ||
           (project.templateId && shouldRepairDuration ? Number(project.duration || 0) : 0),
         storyboard: normalizedShots,
+        storyStoryboard:
+          project.storyStoryboard ||
+          (project.mode !== "remix" ? normalizedShots : []),
+        remixStoryboard:
+          project.remixStoryboard ||
+          (project.mode === "remix" ? normalizedShots : []),
+        storyDuration:
+          Number(project.storyDuration || 0) ||
+          (project.mode !== "remix" ? duration : 40),
+        remixDuration:
+          Number(project.remixDuration || 0) ||
+          (project.mode === "remix" ? duration : 0),
         photoAssetIds,
         timelineRevision: Number(project.timelineRevision || 1)
       });
@@ -1147,6 +1370,125 @@ async function analyzeTemplate(templateId, jobId, deep = false) {
     status: "succeeded",
     progress: 100,
     result: { template: updated }
+  });
+}
+
+async function extractRemixTemplate(templateId, jobId) {
+  const template = getEntity("template", templateId);
+  if (!template) throw new Error("模板不存在");
+  const plan = buildFrameExtractionPlan(template.duration, 24);
+  const outputDir = resolve(mediaRoot, "templates", template.id, "remix");
+  updateJob(jobId, {
+    status: "running",
+    progress: 5,
+    result: { plan }
+  });
+  const extracted = await extractRemixFrames({
+    videoPath: template.videoPath,
+    outputDir,
+    fps: 24,
+    onProgress: (progress, message) =>
+      updateJob(jobId, { progress, log: message })
+  });
+  const extraction = {
+    fps: 24,
+    duration: plan.duration,
+    durationTimecode: plan.durationTimecode,
+    totalFrames: extracted.totalFrames,
+    expectedFrames: plan.totalFrames,
+    seconds: plan.seconds,
+    framesDir: extracted.framesDir,
+    audioPath: extracted.audioPath,
+    audioUrl: mediaUrlForPath(extracted.audioPath),
+    indexPath: extracted.indexPath,
+    indexUrl: mediaUrlForPath(extracted.indexPath),
+    extractedAt: new Date().toISOString()
+  };
+  const updated = updateEntity("template", template.id, {
+    remixExtraction: extraction
+  });
+  updateJob(jobId, {
+    status: "succeeded",
+    progress: 100,
+    result: { templateId: template.id, extraction, template: updated }
+  });
+}
+
+async function analyzeRemixTemplate(templateId, jobId) {
+  const template = getEntity("template", templateId);
+  if (!template?.remixExtraction?.totalFrames) {
+    throw new Error("缺少 24 FPS 帧提取记录");
+  }
+  const analysisDir = resolve(mediaRoot, "templates", template.id, "remix-analysis");
+  await mkdir(analysisDir, { recursive: true });
+  let transcript = [];
+  let transcriptError = "";
+  try {
+    const result = await transcribeWithWhisper(template.videoPath, analysisDir);
+    transcript = result.transcript || [];
+  } catch (error) {
+    transcriptError = safeError(error);
+  }
+  await analyzeTemplate(template.id, jobId, true);
+  const analyzedTemplate = getEntity("template", template.id);
+  const shots = analyzedTemplate.recipe?.shots || [];
+  const promptShots = shots.map((shot, index) => ({
+    index: index + 1,
+    start: shot.start,
+    end: shot.end,
+    framesAt24fps: shot.framesAt24fps,
+    prompt: [
+      `参考原视频 ${Number(shot.start).toFixed(2)}–${Number(shot.end).toFixed(2)} 秒镜头。`,
+      `景别：${shot.framing || "待视觉模型或人工补充"}。`,
+      `动作：${shot.action || "保持原视频人物动作"}。`,
+      `运镜：${shot.camera || "保持原视频机位与运动"}。`,
+      "替换男女主角身份，保持背景、动作、切点和时间轴不变。"
+    ].join("")
+  }));
+  const remixAnalysis = {
+    templateId: template.id,
+    totalFrames: template.remixExtraction.totalFrames,
+    fps: 24,
+    shots: promptShots,
+    promptArchitecture: {
+      source: "template-recipe",
+      fields: [
+        "模板时间区间",
+        "人物目标",
+        "景别",
+        "动作",
+        "运镜",
+        "背景",
+        "身份连续性",
+        "切换规则",
+        "声音参考",
+        "负向约束"
+      ]
+    },
+    audio: {
+      sourcePath: template.remixExtraction.audioPath,
+      transcript,
+      hasVoiceover: transcript.length > 0,
+      transcriptError
+    },
+    subtitles: {
+      mode: "requires-ocr-or-reviewed-transcript",
+      lines: transcript,
+      fontConfidence: "unknown"
+    },
+    targetCandidates: ["left", "right", "person-1", "person-2", "person-3", "person-4"],
+    warnings: [
+      ...(analyzedTemplate.recipe?.analysisWarnings || []),
+      ...(transcriptError ? [`音频转写失败：${transcriptError}`] : [])
+    ],
+    analyzedAt: new Date().toISOString()
+  };
+  const updated = updateEntity("template", template.id, { remixAnalysis });
+  updateJob(jobId, {
+    status: "succeeded",
+    progress: 100,
+    result: { templateId: template.id, remixAnalysis, template: updated },
+    error: remixAnalysis.warnings.length ? remixAnalysis.warnings.join("\n") : null
   });
 }
 
@@ -1440,6 +1782,7 @@ async function renderJob(jobId) {
     height: job.input.height || 720,
     fps: job.input.fps || 24,
     musicPath,
+    musicStart: job.input.musicStart || 0,
     voicePath: job.input.voicePath || "",
     subtitlePath: job.input.subtitlePath || ""
   });

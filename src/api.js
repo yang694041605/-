@@ -35,8 +35,10 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(patch)
     }),
-  getProjectTimeline: (projectId) =>
-    request(`/api/projects/${encodeURIComponent(projectId)}/timeline`),
+  getProjectTimeline: (projectId, mode = "story") =>
+    request(
+      `/api/projects/${encodeURIComponent(projectId)}/timeline?mode=${encodeURIComponent(mode)}`
+    ),
   approveProjectStep: (projectId, payload) =>
     request(`/api/projects/${encodeURIComponent(projectId)}/workflow/approve`, {
       method: "POST",
@@ -95,6 +97,21 @@ export const api = {
   createTemplateClip: (templateId, payload) =>
     request(`/api/templates/${encodeURIComponent(templateId)}/clip`, {
       method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  extractRemixFrames: (templateId) =>
+    request(`/api/templates/${encodeURIComponent(templateId)}/remix/extract`, {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  analyzeRemixTemplate: (templateId) =>
+    request(`/api/templates/${encodeURIComponent(templateId)}/remix/analyze`, {
+      method: "POST",
+      body: JSON.stringify({})
+    }),
+  updateRemixTargets: (projectId, payload) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/remix/targets`, {
+      method: "PUT",
       body: JSON.stringify(payload)
     }),
   updateModel: (modelId, patch) =>

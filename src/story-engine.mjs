@@ -139,6 +139,8 @@ export function normalizeProject(input = {}) {
     date: input.date || "",
     city: input.city || "杭州",
     duration,
+    storyDuration: Number(input.storyDuration) || duration,
+    remixDuration: Number(input.remixDuration) || 0,
     referenceDuration: Number(input.referenceDuration) || 0,
     theme: THEME_SIGNATURES[input.theme] ? input.theme : "三生三世",
     tone: input.tone || "东方浪漫",
@@ -148,12 +150,18 @@ export function normalizeProject(input = {}) {
     photoSources: input.photoSources || {},
     selectedLooks: input.selectedLooks || {},
     workflow: input.workflow || { currentStep: 1, approvals: {} },
+    remixWorkflow: input.remixWorkflow || { currentStep: 1, approvals: {} },
+    remixTargets: input.remixTargets || {},
+    remixRange: input.remixRange || null,
     timelineRevision: Number(input.timelineRevision) || 1,
     vvvStyle: input.vvvStyle || "",
     story:
       String(input.story || "").trim() ||
       "从第一次相遇到今天，我们把平凡的日常，过成了彼此最重要的故事。",
     storyBeats: input.storyBeats || {}
+    ,
+    storyStoryboard: input.storyStoryboard || [],
+    remixStoryboard: input.remixStoryboard || []
   };
 }
 
