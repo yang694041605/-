@@ -8,6 +8,7 @@ import { api, waitForJob } from "./api.js";
 import {
   approvalIsCurrent,
   bindStoryboardToTemplate,
+  createReviewState,
   formatTimecode,
   parseRouteHash,
   routeHash,
@@ -633,7 +634,9 @@ let runtime = {
   looks: [],
   assets: [],
   exports: [],
-  jobs: []
+  jobs: [],
+  timeline: null,
+  approvalSnapshots: {}
 };
 
 function loadState() {
@@ -775,6 +778,11 @@ async function refreshRuntime({ rerender = true } = {}) {
       }
       const template = runtime.templates.find((item) => item.id === project.templateId);
       storyboard = bindStoryboardToTemplate(storyboard, template);
+      const timelinePayload = await api
+        .getProjectTimeline(project.id, effectiveMode)
+        .catch(() => null);
+      runtime.timeline = timelinePayload?.item || null;
+      runtime.approvalSnapshots = timelinePayload?.approvalSnapshots || {};
     }
   } catch {
     runtime.online = false;
@@ -1157,6 +1165,14 @@ function currentRemixTemplate() {
   );
 }
 
+function approvalIsStillCurrent(step, mode = "story") {
+  const workflow =
+    mode === "remix" ? state.remixWorkflow : state.workflow;
+  const approval = workflow?.approvals?.[step];
+  if (!approval) return false;
+  return approvalIsCurrent(approval, runtime.approvalSnapshots?.[step]);
+}
+
 function remixReady(stepNumber) {
   const template = currentRemixTemplate();
   if (stepNumber === 1) {
@@ -1214,7 +1230,7 @@ function remixOverviewPage() {
 function remixStepPage(number) {
   const step = REMIX_STEPS[number - 1];
   const ready = remixReady(number);
-  const approved = Boolean(state.remixWorkflow?.approvals?.[number]);
+  const approved = approvalIsStillCurrent(number, "remix");
   return `
     <div class="page">
       ${pageHeader(step.route)}
@@ -1282,7 +1298,7 @@ function remixStepContent(number) {
       <section class="card card-pad"><div class="section-title"><div><h2>逐镜人物替换</h2><p>每个镜头使用自己的模板区间和提示词版本</p></div></div>
         ${selected ? `<div class="project-brief"><div class="field"><label>当前镜头</label><select class="select" data-shot-select>${remixShots.map((shot) => `<option value="${shot.id}" ${shot.id === selected.id ? "selected" : ""}>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒 · ${shot.status}</option>`).join("")}</select></div><div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div></div><textarea class="textarea" data-video-prompt style="min-height:190px;margin-top:12px;">${esc(buildReplacementPrompt(selected))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button ghost small-button" data-action="build-replacement-prompt">重新生成提示词</button><button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>提交当前镜头替换</button></div>` : '<p class="small muted">请先保存人物目标与复刻区间，系统会建立最多 8 个连续镜头。</p>'}
       </section>
-      ${selected ? `<section class="card card-pad"><div class="section-title"><div><h2>镜头 ${String(selected.order).padStart(2, "0")} 人工质检</h2><p>技术生成成功不等于人工审核通过</p></div><span class="badge ${shotReviewComplete(review) ? "green" : "gray"}">${shotReviewComplete(review) ? "已通过" : "待复核"}</span></div><div class="checklist">${qcItems.map(([key, label]) => `<label class="check-item"><input type="checkbox" data-qc-check="${key}" ${review[key] === "passed" ? "checked" : ""} /><div class="check-copy"><strong>${label}</strong><small>${review[key] === "passed" ? "已通过" : "请实际观看后确认"}</small></div></label>`).join("")}</div><button class="button primary" style="width:100%;margin-top:14px;" data-action="save-shot-qc" data-shot-id="${selected.id}">保存本镜人工审核</button></section>` : ""}
+      ${selected ? `<section class="card card-pad"><div class="section-title"><div><h2>镜头 ${String(selected.order).padStart(2, "0")} 人工质检</h2><p>技术生成成功不等于人工审核通过</p></div><span class="badge ${shotReviewComplete(review) ? "green" : "gray"}">${shotReviewComplete(review) ? "已通过" : "待复核"}</span></div><div class="checklist">${qcItems.map(([key, label]) => `<label class="check-item"><input type="checkbox" data-qc-check="${key}" ${review[key] === "passed" ? "checked" : ""} /><div class="check-copy"><strong>${label}</strong><small>${review[key] === "passed" ? "已通过" : "请实际观看后确认"}</small></div></label>`).join("")}</div><button class="button primary" style="width:100%;margin-top:14px;" data-action="save-shot-qc" data-mode="remix" data-shot-id="${selected.id}">保存本镜人工审核</button></section>` : ""}
     </div>`;
   }
   const exports = runtime.assets.filter((asset) => asset.kind === "export");
@@ -1317,13 +1333,30 @@ function workflowReady(stepNumber) {
     return runtime.looks.filter((look) => look.imagePath).length + count("image") >= 3;
   }
   if (stepNumber === 9) {
-    return count("video") > 0 || count("project-photo") >= 2 || count("export") > 0;
+    return (
+      storyboard.length > 0 &&
+      storyboard.every(
+        (shot) =>
+          shot.status === "approved" &&
+          shotReviewComplete(shot.review) &&
+          Boolean(shot.assets?.video?.assetId)
+      )
+    );
   }
   if (stepNumber === 10) return count("music") > 0;
   if (stepNumber === 11 || stepNumber === 12) {
     return count("voice") > 0 && count("music") > 0;
   }
-  if (stepNumber >= 13) return count("export") > 0;
+  if (stepNumber === 13) {
+    const approval = state.workflow?.approvals?.[12];
+    if (!approvalIsStillCurrent(12, "story") || !approval?.approvedAt) return false;
+    return runtime.assets.some(
+      (asset) =>
+        asset.kind === "export" &&
+        String(asset.createdAt || "") >= String(approval.approvedAt)
+    );
+  }
+  if (stepNumber === 14) return approvalIsStillCurrent(13, "story");
   return false;
 }
 
@@ -1332,8 +1365,8 @@ function wizardPage() {
   const currentStep = Math.min(14, Math.max(1, Number(workflow.currentStep || 1)));
   const current = WIZARD_STEPS[currentStep - 1];
   const ready = workflowReady(currentStep);
-  const completed = Object.keys(workflow.approvals || {}).filter(
-    (key) => workflow.approvals[key]
+  const completed = Object.keys(workflow.approvals || {}).filter((key) =>
+    approvalIsStillCurrent(Number(key), "story")
   ).length;
   const allDone = completed >= 14;
   return `
@@ -1355,7 +1388,7 @@ function wizardPage() {
           <div class="section-title"><div><h2>制作流程</h2><p>已完成和可确认步骤会显示状态</p></div><button class="text-button" data-action="reset-workflow">从头开始</button></div>
           <div class="wizard-steps">
             ${WIZARD_STEPS.map((step) => {
-              const done = Boolean(workflow.approvals?.[step.number]);
+              const done = approvalIsStillCurrent(step.number, "story");
               const isCurrent = step.number === currentStep;
               const can = workflowReady(step.number);
               return `
@@ -1400,7 +1433,7 @@ function wizardPage() {
 function workflowStepPage(number) {
   const step = WIZARD_STEPS[number - 1];
   const ready = workflowReady(number);
-  const completed = Boolean(state.workflow?.approvals?.[number]);
+  const completed = approvalIsStillCurrent(number, activeRouteInfo.mode || "story");
   return `
     <div class="page">
       ${pageHeader(step.route)}
@@ -1416,7 +1449,7 @@ function workflowStepPage(number) {
       </section>
       ${workflowStepContent(number)}
       <section class="step-confirm card">
-        <div><strong>${ready ? "本步骤的最低价材料条件已经满足" : "本步骤仍有材料缺口"}</strong><p>${ready ? "请先实际检查画面或试听，再确认进入下一步。确认记录会随项目保存。" : "返回本页上方或素材中心补齐必要材料后，确认按钮才会开放。"}</p></div>
+        <div><strong>${ready ? "本步骤最低素材条件已满足" : "本步骤仍有材料缺口"}</strong><p>${ready ? "请先实际检查画面或试听，再确认进入下一步。确认记录会随项目保存。" : "返回本页上方或素材中心补齐必要材料后，确认按钮才会开放。"}</p></div>
         <div class="step-confirm-actions">
           ${number > 1 ? `<button class="button ghost small-button" data-route="step${number - 1}">上一步</button>` : ""}
           <button class="button primary" data-action="approve-workflow-step" data-approval-step="${number}" data-approval-mode="${activeRouteInfo.mode || state.mode || "story"}" ${ready ? "" : "disabled"}>${icon("arrow")}确认并进入第 ${Math.min(14, number + 1)} 步</button>
@@ -1424,6 +1457,22 @@ function workflowStepPage(number) {
       </section>
     </div>
   `;
+}
+
+function shotQcCard(shot, mode = "story") {
+  if (!shot) return "";
+  const review = shot.review || {};
+  const items = [
+    ["identity", "身份一致"],
+    ["crossFace", "无串脸"],
+    ["hands", "手部正确"],
+    ["actionMatch", "动作匹配"],
+    ["backgroundDrift", "背景稳定"],
+    ["blackBars", "无黑边"],
+    ["subtitleSafety", "字幕安全"],
+    ["audioSync", "音画同步"]
+  ];
+  return `<section class="card card-pad"><div class="section-title"><div><h2>镜头 ${String(shot.order || shot.number || 1).padStart(2, "0")} 人工质检</h2><p>技术生成成功不等于人工审核通过</p></div><span class="badge ${shotReviewComplete(review) ? "green" : "gray"}">${shotReviewComplete(review) ? "已通过" : "待复核"}</span></div><div class="checklist">${items.map(([key, label]) => `<label class="check-item"><input type="checkbox" data-qc-check="${key}" ${review[key] === "passed" ? "checked" : ""} /><div class="check-copy"><strong>${label}</strong><small>${review[key] === "passed" ? "已通过" : "请实际观看后确认"}</small></div></label>`).join("")}</div><button class="button primary" style="width:100%;margin-top:14px;" data-action="save-shot-qc" data-mode="${mode}" data-shot-id="${shot.id}">保存本镜人工审核</button></section>`;
 }
 
 function workflowStepContent(number) {
@@ -1436,6 +1485,10 @@ function workflowStepContent(number) {
   const exports = runtime.assets.filter((asset) => asset.kind === "export" && asset.url);
   const project = runtime.projects.find((item) => item.id === currentProjectId);
   const template = runtime.templates.find((item) => item.id === project?.templateId);
+  const selectedShot =
+    storyboard.find((shot) => shot.id === remixSelectedShotId) ||
+    storyboard[0] ||
+    null;
 
   const raw = {
     1: `
@@ -1528,17 +1581,19 @@ function workflowStepContent(number) {
         <section class="card card-pad">
           <div class="section-title"><div><h2>参考视频人物替换</h2><p>${template ? esc(template.title) : "尚未应用抖音模板"}</p></div><span class="badge gold">4–8 秒单镜</span></div>
           <div class="project-brief">
-            <div class="field"><label>选择镜头</label><select class="select" data-shot-select>${storyboard.map((shot)=>`<option value="${shot.id}">${String(shot.number).padStart(2,"0")} · ${esc(shot.title)} · ${shot.duration}s</option>`).join("")}</select></div>
+            <div class="field"><label>选择镜头</label><select class="select" data-shot-select>${storyboard.map((shot)=>`<option value="${shot.id}" ${shot.id === selectedShot?.id ? "selected" : ""}>${String(shot.number).padStart(2,"0")} · ${esc(shot.title)} · ${shot.duration}s · ${shot.status}</option>`).join("")}</select></div>
             <div class="field"><label>男主角参考</label><input class="input" value="${esc(state.groom)}" readonly /></div>
             <div class="field"><label>女主角参考</label><input class="input" value="${esc(state.bride)}" readonly /></div>
             <div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div>
+            <div class="field"><label>本镜首帧</label><select class="select" data-first-frame-asset><option value="">选择已生成图片</option>${imageAssets.map((asset) => `<option value="${asset.id}" ${selectedShot?.assets?.firstFrame?.assetId === asset.id ? "selected" : ""}>${esc(asset.title || asset.kind)}</option>`).join("")}</select></div>
           </div>
-          <textarea class="textarea" data-video-prompt style="min-height:185px;margin-top:12px;">${esc(buildReplacementPrompt(storyboard[0]))}</textarea>
+          <textarea class="textarea" data-video-prompt style="min-height:185px;margin-top:12px;">${esc(buildReplacementPrompt(selectedShot || storyboard[0]))}</textarea>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
             <button class="button ghost small-button" data-action="build-replacement-prompt">重新生成完整提示词</button>
             <button class="button ghost small-button" data-action="copy-full-video-prompt">复制完整提示词</button>
+            <button class="button ghost small-button" data-action="bind-first-frame">绑定首帧</button>
             <button class="button secondary" data-route="generate">打开生成中心</button>
-            <button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>按模板生成替换镜头</button>
+            <button class="button primary" data-action="${template ? "generate-template-shot" : "generate-story-shot"}" ${selectedShot?.assets?.firstFrame?.assetId || template ? "" : "disabled"}>${template ? "按模板生成替换镜头" : "按首帧生成当前镜头"}</button>
           </div>
         </section>
         <section class="card card-pad">
@@ -1559,6 +1614,7 @@ function workflowStepContent(number) {
           <div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>先做首帧</strong>首帧出现串脸、错手或空间错误时先修图，不能把希望寄托在视频模型自动修复。</div></div>
         </section>
       </div>
+      ${shotQcCard(selectedShot, "story")}
       <section class="card card-pad" style="margin-top:18px;">
         <div class="section-title"><div><h2>可复制视频提示词库</h2><p>按任务类型选择，再替换人物和背景字段</p></div></div>
         <div class="prompt-grid">
@@ -1613,7 +1669,7 @@ function renderImageAssets(items) {
 
 function renderVideoAssets(items) {
   if (!items.length) return '<div class="empty-state" style="min-height:180px;"><div><div class="empty-state-symbol">影</div><h3>还没有视频</h3><p>完成镜头或成片后会显示在这里。</p></div></div>';
-  return `<div class="asset-grid">${items.map((asset)=>`<article class="asset-card card"><div class="asset-preview"><video src="${esc(api.mediaUrl(asset.url))}" controls preload="metadata"></video></div><div class="asset-info"><strong>${esc(asset.title)}</strong><small>${Number(asset.media?.duration || 0).toFixed(1)} 秒 · ${esc(asset.kind)}</small></div></article>`).join("")}</div>`;
+  return `<div class="asset-grid">${items.map((asset)=>`<article class="asset-card card"><div class="asset-preview"><video src="${esc(api.mediaUrl(asset.url))}" controls preload="metadata"></video></div><div class="asset-info"><strong>${esc(asset.title)}</strong><small>${Number(asset.media?.duration || 0).toFixed(1)} 秒 · ${esc(asset.kind)}</small>${asset.kind === "export" ? `<small class="badge ${asset.technicalQc?.ok ? "green" : "red"}">${asset.technicalQc?.ok ? "技术检查通过" : "技术检查未通过"}</small>` : ""}</div></article>`).join("")}</div>`;
 }
 
 function buildReplacementPrompt(shot = storyboard[0], policy = "keep") {
@@ -2455,11 +2511,11 @@ function exportPage() {
           <button class="button gold" style="margin-top:22px;" data-action="render-project">${icon("arrow")}FFmpeg 合成并导出</button>
         </section>
         <section class="card card-pad">
-          <div class="section-title"><div><h2>照片电影素材</h2><p>${videos.length} 段视频 · ${photos.length} 张照片</p></div></div>
+          <div class="section-title"><div><h2>当前时间轴素材</h2><p>${videos.length} 段视频 · ${photos.length} 张照片；成片只使用当前已批准镜头</p></div></div>
           <label class="upload-target" for="photo-movie-files" style="min-height:96px;margin-bottom:14px;">
             ${icon("upload")}
             <strong>添加婚纱照 / 婚礼照片</strong>
-            <small>没有视频模型时也可以用照片加旁白和配乐生成 MP4</small>
+            <small>上传的照片必须先绑定分镜并通过人工质检，不能绕过镜头时间轴</small>
           </label>
           <input id="photo-movie-files" type="file" accept="image/png,image/jpeg,image/webp" data-photo-movie-input multiple hidden />
           <div class="section-title"><div><h2>交付清单</h2><p>建议与成片一起归档</p></div></div>
@@ -2473,7 +2529,7 @@ function exportPage() {
       </div>
       ${
         exports.length
-          ? `<section class="card card-pad" style="margin-top:18px;"><div class="section-title"><div><h2>最近导出</h2><p>由本地 FFmpeg 合成并完成媒体检查</p></div></div><div class="asset-grid">${exports.slice(0, 6).map((asset) => `<article class="asset-card card"><div class="asset-preview"><video src="${esc(api.mediaUrl(asset.url))}" controls preload="metadata"></video></div><div class="asset-info"><strong>${esc(asset.title)}</strong><small>${Number(asset.media?.duration || 0).toFixed(1)} 秒 · MP4</small></div></article>`).join("")}</div></section>`
+          ? `<section class="card card-pad" style="margin-top:18px;"><div class="section-title"><div><h2>最近导出</h2><p>由本地 FFmpeg 合成并完成技术检查</p></div></div><div class="asset-grid">${exports.slice(0, 6).map((asset) => `<article class="asset-card card"><div class="asset-preview"><video src="${esc(api.mediaUrl(asset.url))}" controls preload="metadata"></video></div><div class="asset-info"><strong>${esc(asset.title)}</strong><small>${Number(asset.media?.duration || 0).toFixed(1)} 秒 · MP4</small><small class="badge ${asset.technicalQc?.ok ? "green" : "red"}">${asset.technicalQc?.ok ? "技术检查通过" : "技术检查未通过"}</small></div></article>`).join("")}</div></section>`
           : ""
       }
     </div>
@@ -2797,7 +2853,7 @@ function bindCurrentView() {
   };
   shotSelect?.addEventListener("change", () => {
     remixSelectedShotId = shotSelect.value;
-    if (activeRouteInfo.mode === "remix") {
+    if (activeRouteInfo.mode === "remix" || activeRoute === "step9") {
       render();
       return;
     }
@@ -3152,13 +3208,18 @@ async function handleAction(button) {
   if (action === "save-shot-qc") {
     const shot = storyboard.find((item) => item.id === button.dataset.shotId);
     if (!shot) return;
+    if (!shot.assets?.video?.assetId) {
+      showToast("当前镜头还没有生成视频，不能进行成片人工质检");
+      return;
+    }
+    const mode = button.dataset.mode === "remix" ? "remix" : "story";
     const checks = {};
     document.querySelectorAll("[data-qc-check]").forEach((input) => {
       checks[input.dataset.qcCheck] = input.checked ? "passed" : "pending";
     });
     const passed = shotReviewComplete(checks);
     await api.updateShot(currentProjectId, shot.id, {
-      mode: "remix",
+      mode,
       review: {
         ...checks,
         reviewedBy: "producer",
@@ -3168,6 +3229,88 @@ async function handleAction(button) {
     });
     await refreshRuntime();
     showToast(passed ? "本镜八项人工质检已通过" : "本镜仍有质检项未通过");
+  }
+  if (action === "bind-first-frame") {
+    const shotId = document.querySelector("[data-shot-select]")?.value;
+    const assetId = document.querySelector("[data-first-frame-asset]")?.value;
+    const shot = storyboard.find((item) => item.id === shotId);
+    const asset = runtime.assets.find((item) => item.id === assetId);
+    if (!shot || !asset) {
+      showToast("请选择要绑定的首帧图片");
+      return;
+    }
+    await api.updateShot(currentProjectId, shot.id, {
+      mode: "story",
+      assets: {
+        ...(shot.assets || {}),
+        firstFrame: {
+          assetId: asset.id,
+          hash: asset.contentHash || ""
+        },
+        video: null,
+        finalClip: null
+      },
+      review: createReviewState(),
+      status: "draft"
+    });
+    await refreshRuntime();
+    showToast("首帧已经绑定到当前故事镜头");
+  }
+  if (action === "generate-story-shot") {
+    const selectedShotId = document.querySelector("[data-shot-select]")?.value;
+    const selectedShot = storyboard.find((item) => item.id === selectedShotId);
+    const prompt = document.querySelector("[data-video-prompt]")?.value.trim();
+    const model = defaultModel("video");
+    if (!selectedShot || !prompt || !model) {
+      showToast("请选择镜头、填写提示词并配置视频模型");
+      return;
+    }
+    if (!selectedShot.assets?.firstFrame?.assetId) {
+      showToast("当前镜头尚未绑定首帧");
+      return;
+    }
+    const inputs = [`first_frame:${selectedShot.assets.firstFrame.assetId}`];
+    if (state.photoAssetIds?.groom) {
+      inputs.push(`reference_image:${state.photoAssetIds.groom}`);
+    }
+    if (state.photoAssetIds?.bride) {
+      inputs.push(`reference_image:${state.photoAssetIds.bride}`);
+    }
+    button.disabled = true;
+    button.textContent = "提交故事镜头…";
+    const result = await api.generateVideo({
+      projectId: currentProjectId,
+      modelId: model.id,
+      shotId: selectedShot.id,
+      prompt,
+      inputs,
+      parameters: {
+        ratio: state.aspect === "9:16" ? "9:16" : "16:9",
+        duration: Math.max(0.5, Math.min(8, Number(selectedShot.duration || 4))),
+        resolution: model.parameters?.resolution || "720p"
+      }
+    });
+    const job = await trackJob(result.job.id, "故事镜头生成");
+    if (job?.result?.asset) {
+      await api.updateShot(currentProjectId, selectedShot.id, {
+        mode: "story",
+        prompt,
+        assets: {
+          ...(selectedShot.assets || {}),
+          video: {
+            assetId: job.result.asset.id,
+            hash: job.result.asset.contentHash || ""
+          },
+          finalClip: {
+            assetId: job.result.asset.id,
+            hash: job.result.asset.contentHash || ""
+          }
+        },
+        review: createReviewState(),
+        status: "human-review"
+      });
+    }
+    await refreshRuntime();
   }
   if (action === "generate-template-shot") {
     const project = runtime.projects.find((item) => item.id === currentProjectId);
@@ -3256,6 +3399,7 @@ async function handleAction(button) {
             hash: job.result.asset.contentHash || ""
           }
         },
+        review: createReviewState(),
         status: "human-review"
       });
     }

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   buildAudioMixFilter,
   buildSafeFillFilter,
+  evaluateTechnicalQc,
   sceneCutsToShots
 } from "../server/media.mjs";
 import { renderOriginalBgm } from "../server/bgm.mjs";
@@ -55,4 +56,41 @@ test("旁白出现时音乐通过侧链自动压低", () => {
   assert.match(filter, /sidechaincompress/);
   assert.match(filter, /loudnorm=I=-14/);
   assert.match(filter, /musicDucked/);
+});
+
+test("技术质检独立检查帧率、时长、黑边和字幕安全", () => {
+  const result = evaluateTechnicalQc({
+    media: {
+      duration: 40,
+      video: { width: 1280, height: 720, avg_frame_rate: "24/1" },
+      audio: { codec_type: "audio" }
+    },
+    expectedDuration: 40,
+    width: 1280,
+    height: 720,
+    fps: 24,
+    crop: { width: 1280, height: 720 },
+    subtitleText: "1\n00:00:00,000 --> 00:00:02,000\n这是一行安全字幕\n"
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.checks.frameRate, true);
+  assert.equal(result.checks.subtitleLength, true);
+
+  const failed = evaluateTechnicalQc({
+    media: {
+      duration: 39,
+      video: { width: 1280, height: 720, avg_frame_rate: "30/1" },
+      audio: null
+    },
+    expectedDuration: 40,
+    width: 1280,
+    height: 720,
+    fps: 24,
+    crop: { width: 960, height: 540 },
+    subtitleText: "1\n00:00:00,000 --> 00:00:02,000\n这一行字幕明显超过十八个汉字的安全宽度\n"
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.checks.audioTrack, false);
+  assert.equal(failed.checks.noBlackBars, false);
+  assert.equal(failed.checks.subtitleLength, false);
 });

@@ -151,6 +151,7 @@ export async function renderTimeline({
   height = 720,
   fps = 24,
   musicPath = "",
+  musicStart = 0,
   voicePath = "",
   subtitlePath = "",
   safeFill = true
@@ -210,13 +211,21 @@ export async function renderTimeline({
     ]);
 
     const audioInputs = [];
-    if (musicPath) audioInputs.push({ path: musicPath, loop: true, volume: 0.38 });
+    if (musicPath) {
+      audioInputs.push({
+        path: musicPath,
+        loop: true,
+        volume: 0.38,
+        start: Math.max(0, Number(musicStart) || 0)
+      });
+    }
     if (voicePath) audioInputs.push({ path: voicePath, loop: false, volume: 1 });
 
     const args = ["-y", "-i", silentPath];
     if (subtitlePath) args.push("-i", subtitlePath);
     for (const audio of audioInputs) {
       if (audio.loop) args.push("-stream_loop", "-1");
+      if (audio.start) args.push("-ss", String(audio.start));
       args.push("-i", audio.path);
     }
 
@@ -341,6 +350,89 @@ export function buildAudioMixFilter({
     `${labels.join("")}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=2,loudnorm=I=-14:TP=-1:LRA=11[aout]`
   );
   return filters.join(";");
+}
+
+export function evaluateTechnicalQc({
+  media,
+  expectedDuration,
+  width,
+  height,
+  fps,
+  crop,
+  subtitleText = ""
+}) {
+  const checks = {
+    videoTrack: Boolean(media?.video),
+    audioTrack: Boolean(media?.audio),
+    frameRate: Number(String(media?.video?.avg_frame_rate || "0/1").split("/")[0]) === Number(fps),
+    duration:
+      Math.abs(Number(media?.duration || 0) - Number(expectedDuration || 0)) <= 0.08,
+    resolution:
+      Number(media?.video?.width || 0) === Number(width) &&
+      Number(media?.video?.height || 0) === Number(height),
+    noBlackBars:
+      !crop ||
+      (Number(crop.width || width) >= Number(width) - 2 &&
+        Number(crop.height || height) >= Number(height) - 2),
+    subtitleLength: String(subtitleText || "")
+      .split(/\r?\n/)
+      .filter((line) => line && !/^\d+$/.test(line) && !line.includes("-->"))
+      .every((line) => line.length <= 18)
+  };
+  return {
+    ok: Object.values(checks).every(Boolean),
+    checks,
+    media
+  };
+}
+
+export async function detectVisibleCrop(filePath) {
+  const result = await runProcess(FFMPEG, [
+    "-hide_banner",
+    "-i",
+    filePath,
+    "-vf",
+    "cropdetect=24:16:0",
+    "-frames:v",
+    "30",
+    "-f",
+    "null",
+    "-"
+  ]);
+  const matches = [...String(result.stderr || "").matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)];
+  const last = matches.at(-1);
+  return last
+    ? {
+        width: Number(last[1]),
+        height: Number(last[2]),
+        x: Number(last[3]),
+        y: Number(last[4])
+      }
+    : null;
+}
+
+export async function inspectRenderedQuality({
+  filePath,
+  expectedDuration,
+  width = 1280,
+  height = 720,
+  fps = 24,
+  subtitlePath = ""
+}) {
+  const media = await probeMedia(filePath);
+  const [crop, subtitleText] = await Promise.all([
+    detectVisibleCrop(filePath).catch(() => null),
+    subtitlePath ? readFile(subtitlePath, "utf8").catch(() => "") : Promise.resolve("")
+  ]);
+  return evaluateTechnicalQc({
+    media,
+    expectedDuration,
+    width,
+    height,
+    fps,
+    crop,
+    subtitleText
+  });
 }
 
 async function getDuration(filePath) {

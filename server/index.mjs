@@ -29,6 +29,7 @@ import {
   extractCover,
   extractVideoSegment,
   inferExtension,
+  inspectRenderedQuality,
   probeMedia,
   renderTimeline,
   runAdvancedMediaCheck,
@@ -53,7 +54,10 @@ import {
   sha256Text,
   validateRenderTimeline
 } from "./production.mjs";
-import { splitSubtitleText } from "../src/production-model.mjs";
+import {
+  approvalIsCurrent,
+  splitSubtitleText
+} from "../src/production-model.mjs";
 import {
   buildFrameExtractionPlan,
   buildRemixShotPlan,
@@ -230,6 +234,19 @@ async function handleApi(request, response, url) {
       assets,
       Number(project.timelineRevision) || 1
     );
+    const maxStep = projectView.mode === "remix" ? 4 : 14;
+    const approvalSnapshots = Object.fromEntries(
+      Array.from({ length: maxStep }, (_, index) => {
+        const step = index + 1;
+        return [
+          step,
+          approvalSnapshot(projectView, assets, {
+            mode: projectView.mode,
+            step
+          })
+        ];
+      })
+    );
     return sendJson(response, 200, {
       ok: true,
       item: timeline,
@@ -240,7 +257,10 @@ async function handleApi(request, response, url) {
             ? project.remixWorkflow?.currentStep
             : project.workflow?.currentStep) || 1
         )
-      })
+      }),
+      approvalSnapshots,
+      workflow:
+        projectView.mode === "remix" ? project.remixWorkflow : project.workflow
     });
   }
 
@@ -263,6 +283,23 @@ async function handleApi(request, response, url) {
       return sendJson(response, 409, {
         ok: false,
         error: "时间轴已变化，请重新检查并确认当前版本"
+      });
+    }
+    const requiredStep = projectView.mode === "remix" ? 3 : 9;
+    const workflow =
+      projectView.mode === "remix" ? project.remixWorkflow : project.workflow;
+    const renderApproval = workflow?.approvals?.[requiredStep];
+    const renderSnapshot = approvalSnapshot(projectView, assets, {
+      mode: projectView.mode,
+      step: requiredStep
+    });
+    if (!approvalIsCurrent(renderApproval, renderSnapshot)) {
+      return sendJson(response, 409, {
+        ok: false,
+        error:
+          projectView.mode === "remix"
+            ? "复刻第 3 步尚未按当前素材确认，或素材已变化"
+            : "故事第 9 步尚未按当前素材确认，或素材已变化"
       });
     }
     let resolved;
@@ -1792,6 +1829,18 @@ async function renderJob(jobId) {
     ok: false,
     error: safeError(error)
   }));
+  const technicalQc = await inspectRenderedQuality({
+    filePath: outputPath,
+    expectedDuration: Number(job.input.duration || verified.duration),
+    width: Number(job.input.width || 1280),
+    height: Number(job.input.height || 720),
+    fps: Number(job.input.fps || 24),
+    subtitlePath: job.input.subtitlePath || ""
+  }).catch((error) => ({
+    ok: false,
+    checks: {},
+    error: safeError(error)
+  }));
   const outputUrl = mediaUrlForPath(outputPath);
   const editProjectPath = join(outputDir, "edit-project.json");
   await writeFile(
@@ -1819,6 +1868,7 @@ async function renderJob(jobId) {
         outputPath,
         verifiedMedia: verified,
         advancedCheck,
+        technicalQc,
         createdAt: new Date().toISOString()
       },
       null,
@@ -1834,7 +1884,8 @@ async function renderJob(jobId) {
     localPath: outputPath,
     contentHash: await sha256File(outputPath),
     version: 1,
-    media: verified
+    media: verified,
+    technicalQc
   });
   const asset = saveEntity("asset", {
     id: id("asset"),
@@ -1846,6 +1897,7 @@ async function renderJob(jobId) {
     mimeType: "video/mp4",
     media: verified,
     contentHash: await sha256File(outputPath),
+    technicalQc,
     version: 1,
     jobId: job.id
   });
@@ -1869,7 +1921,8 @@ async function renderJob(jobId) {
       export: exportEntity,
       asset,
       editProject: editProjectAsset,
-      advancedCheck
+      advancedCheck,
+      technicalQc
     }
   });
 }
