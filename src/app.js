@@ -1232,10 +1232,53 @@ function workflowStepContent(number) {
       </div>${renderImageAssets(imageAssets.slice(0,12))}`,
     9: `
       <div class="content-grid">
-        <section class="card card-pad"><div class="section-title"><div><h2>参考视频人物替换</h2><p>${template ? esc(template.title) : "尚未应用抖音模板"}</p></div><span class="badge gold">4–8 秒单镜</span></div><textarea class="textarea" data-video-prompt style="min-height:150px;">保持参考视频的人物动作、机位、镜头运动和剪辑节奏；将男主角替换为上传照片中的${state.groom}，女主角替换为${state.bride}。保持面部身份、发型、服装、手部接触和身高差连续。背景保持原参考视频不变。</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="button ghost small-button" data-action="replacement-policy" data-policy="keep">保持原背景</button><button class="button ghost small-button" data-action="replacement-policy" data-policy="change">替换背景</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="button secondary" data-route="generate">打开生成中心</button><button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>按模板生成替换镜头</button></div></section>
-        <section class="card card-pad"><div class="section-title"><div><h3>替换提示词结构</h3><p>必须写清七项</p></div></div><div class="tag-cloud"><span class="tag">参考视频</span><span class="tag">男女主参考图</span><span class="tag">身份锁定</span><span class="tag">动作保持</span><span class="tag">镜头保持</span><span class="tag">背景保留/替换</span><span class="tag">负向约束</span></div><div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>先出首帧</strong>首帧有串脸、手部错误时先修图，不进入视频生成。</div></div></section>
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>参考视频人物替换</h2><p>${template ? esc(template.title) : "尚未应用抖音模板"}</p></div><span class="badge gold">4–8 秒单镜</span></div>
+          <div class="project-brief">
+            <div class="field"><label>选择镜头</label><select class="select" data-shot-select>${storyboard.map((shot)=>`<option value="${shot.id}">${String(shot.number).padStart(2,"0")} · ${esc(shot.title)} · ${shot.duration}s</option>`).join("")}</select></div>
+            <div class="field"><label>男主角参考</label><input class="input" value="${esc(state.groom)}" readonly /></div>
+            <div class="field"><label>女主角参考</label><input class="input" value="${esc(state.bride)}" readonly /></div>
+            <div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div>
+          </div>
+          <textarea class="textarea" data-video-prompt style="min-height:185px;margin-top:12px;">${esc(buildReplacementPrompt(storyboard[0]))}</textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+            <button class="button ghost small-button" data-action="build-replacement-prompt">重新生成完整提示词</button>
+            <button class="button ghost small-button" data-action="copy-full-video-prompt">复制完整提示词</button>
+            <button class="button secondary" data-route="generate">打开生成中心</button>
+            <button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>按模板生成替换镜头</button>
+          </div>
+        </section>
+        <section class="card card-pad">
+          <div class="section-title"><div><h3>详细提示词必须包含</h3><p>缺一项都可能造成串脸、动作错误或背景不连续</p></div></div>
+          <div class="checklist">
+            ${[
+              ["素材角色", "哪张图是男主、哪张图是女主，哪段视频是运动参考"],
+              ["身份锁定", "脸型、五官比例、发际线、发型、肤色、身高差"],
+              ["服装锁定", "每镜对应的造型编号与配饰"],
+              ["时空锁定", "背景、建筑、道具、光线方向、色温和年代"],
+              ["动作结构", "起始姿态、动作过程、结束姿态、手部接触"],
+              ["镜头结构", "景别、机位高度、角度、运镜和速度"],
+              ["切换规则", "本镜切点与下一镜接法"],
+              ["声音参考", "环境声、脚步、衣料声和入声点"],
+              ["负向约束", "文字、水印、换脸、漂移、多指、粘连、跳轴"]
+            ].map(([title,hint])=>`<div class="check-item"><span class="check-icon pending">·</span><div class="check-copy"><strong>${title}</strong><small>${hint}</small></div></div>`).join("")}
+          </div>
+          <div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>先做首帧</strong>首帧出现串脸、错手或空间错误时先修图，不能把希望寄托在视频模型自动修复。</div></div>
+        </section>
       </div>
-      <section class="card card-pad" style="margin-top:18px;"><div class="section-title"><div><h2>已生成视频</h2><p>${videoAssets.length} 个</p></div></div>${renderVideoAssets(videoAssets)}</section>`,
+      <section class="card card-pad" style="margin-top:18px;">
+        <div class="section-title"><div><h2>可复制视频提示词库</h2><p>按任务类型选择，再替换人物和背景字段</p></div></div>
+        <div class="prompt-grid">
+          ${[
+            ["人物首帧", "生成电影级婚礼人物首帧，参考男女主照片…"],
+            ["保持背景", "保持参考视频动作、机位和背景不变，替换人物身份…"],
+            ["替换背景", "保持人物动作和镜头运动，替换背景并匹配阴影…"],
+            ["手部特写", "双手特写，十指相扣，手指结构正确，衣袖自然垂落…"],
+            ["时代转场", "在牵手动作中完成匹配剪辑，下一镜从相同手部位置开始…"]
+          ].map(([title,summary])=>`<article class="prompt-card card"><div class="prompt-card-head"><h3>${title}</h3><button class="text-button" data-action="copy-video-preset" data-preset="${title}">复制模板</button></div><div class="prompt-card-body"><p class="small" style="margin:0;line-height:1.75;">${summary}</p></div></article>`).join("")}
+        </div>
+      </section>
+      <section class="card card-pad" style="margin-top:18px;"><div class="section-title"><div><h2>已生成并回传的视频</h2><p>${videoAssets.length} 个镜头</p></div></div>${renderVideoAssets(videoAssets)}</section>`,
     10: `
       <div class="content-grid">
         <section class="card card-pad"><div class="section-title"><div><h2>BGM 风格试听</h2><p>从第一个画面开始铺底，为人声留出位置</p></div></div><div class="choice-grid" style="grid-template-columns:1fr;"><button class="choice-card active" data-action="music-choice"><span class="choice-symbol">弦</span><h4>东方弦乐 + 轻钢琴</h4><p>舒缓开场，誓言段抬升，最后淡出。</p></button><button class="choice-card" data-action="music-choice"><span class="choice-symbol">琴</span><h4>温暖钢琴 + 氛围垫</h4><p>适合照片和旁白较多的版本。</p></button></div><button class="button primary" style="width:100%;margin-top:14px;" data-action="generate-music">生成候选 BGM</button></section>
@@ -1278,6 +1321,51 @@ function renderImageAssets(items) {
 function renderVideoAssets(items) {
   if (!items.length) return '<div class="empty-state" style="min-height:180px;"><div><div class="empty-state-symbol">影</div><h3>还没有视频</h3><p>完成镜头或成片后会显示在这里。</p></div></div>';
   return `<div class="asset-grid">${items.map((asset)=>`<article class="asset-card card"><div class="asset-preview"><video src="${esc(api.mediaUrl(asset.url))}" controls preload="metadata"></video></div><div class="asset-info"><strong>${esc(asset.title)}</strong><small>${Number(asset.media?.duration || 0).toFixed(1)} 秒 · ${esc(asset.kind)}</small></div></article>`).join("")}</div>`;
+}
+
+function buildReplacementPrompt(shot = storyboard[0], policy = "keep") {
+  const selectedShot = shot || storyboard[0] || {
+    title: "指定镜头",
+    scene: "模板原场景",
+    shot: "中景",
+    move: "保持参考视频运镜",
+    duration: 5,
+    prompt: "人物动作与原参考视频一致"
+  };
+  const background =
+    policy === "change"
+      ? `背景替换为${state.city || "现代"}婚礼场景。新背景的地平线、主光方向、色温和阴影必须与人物动作匹配，保留脚底接触阴影、手部接触关系、服装边缘和头发轮廓，不得出现漂浮、抠图边或遮挡错误。`
+      : "严格保留参考视频中的建筑、道具、空间透视、背景材质、主光方向和环境色。";
+  return [
+    "【任务】参考视频人物替换",
+    `【参考视频】${selectedShot.title}，原片场景为${selectedShot.scene}，动作目标：${selectedShot.prompt || "保持原参考动作"}`,
+    `【人物身份】男主角=${state.groom}，女主角=${state.bride}；使用上传的男女主照片作为唯一面容身份参考，不改变成年面部比例。`,
+    `【输出规格】${state.aspect}，约 ${selectedShot.duration || 5} 秒，真人电影级写实，24 FPS 成片，真实皮肤、头发、织物、金属和环境材质。`,
+    `【本镜起始】以模板本镜首帧的构图、人物站位、视线、服装轮廓和受光为起始状态。`,
+    `【动作过程】${selectedShot.prompt || "人物按参考视频动作自然移动"}；动作有重心、惯性和正确接触关系，手部结构正确。`,
+    `【镜头运动】保持参考视频的${selectedShot.shot || "景别"}、${selectedShot.move || "镜头运动"}、机位高度、轴向、速度和切点，不重新设计镜头。`,
+    "【身份连续性】跨镜头保持脸型、五官比例、发际线、发型、肤色、身高差、服装和配饰一致；男女人物不能串脸。",
+    `【背景策略】${background}`,
+    "【动作连续性】牵手、拥抱、回眸等动作必须与前后镜衔接，不重复上一镜，不跳过动作起点，不反转空间方向。",
+    "【声音参考】保留环境声、脚步声、衣料摩擦声和风声的气氛；若本镜有旁白，音乐让出中频。",
+    "【负向约束】不要文字、水印、黑边、灰色遮罩、拼版、多余人物、面部漂移、换脸特效、塑料皮肤、过度磨皮、多余手指、肢体粘连、服装跳变、镜头跳轴和夸张仙侠特效。"
+  ].join("\n");
+}
+
+function videoPresetPrompt(name) {
+  const presets = {
+    人物首帧:
+      `电影级婚礼人物定妆首帧，男主角${state.groom}与女主角${state.bride}。以真实照片为唯一身份参考，保持脸型、五官比例、发际线和发型一致；全身或七分身构图，真实皮肤、织物和金属材质，电影级暖侧光，干净背景，不出现文字、水印和拼贴。`,
+    保持背景:
+      buildReplacementPrompt(storyboard[0], "keep"),
+    替换背景:
+      buildReplacementPrompt(storyboard[0], "change"),
+    手部特写:
+      `双手特写，男主角${state.groom}从画面左侧伸手，女主角${state.bride}从右侧回应，指尖先接触再轻轻相扣；手指数量、关节、指甲和衣袖褶裥结构正确，动作有重量与轻微停顿，背景保持参考视频空间，电影浅景深。`,
+    时代转场:
+      `用牵手动作做匹配剪辑，当前时代的手部位置、运动方向和速度与下一时代起始画面完全匹配；镜头轴线不反转，服装与场景切换清晰，不依赖人物融化、光晕或换装特效。`
+  };
+  return presets[name] || "";
 }
 
 function templatesPage() {
@@ -2603,6 +2691,21 @@ async function handleAction(button) {
         : `保持参考视频的构图、景别、机位、人物动作、镜头运动和剪辑节奏。男主角替换为参考图中的${state.groom}，女主角替换为参考图中的${state.bride}。严格保持两人的脸型、五官比例、发际线、发型、肤色和身高差。保持原视频背景的建筑、道具、空间透视、光线方向和色调。不要改变镜头轴线和切点位置，不要出现文字、水印、面部漂移、服装跳变或肢体粘连。`;
     showToast(policy === "change" ? "已切换为可替换背景提示词" : "已切换为保持背景提示词");
   }
+  if (action === "build-replacement-prompt") {
+    const shotId = document.querySelector("[data-shot-select]")?.value;
+    const policy = document.querySelector("[data-background-policy]")?.value || "keep";
+    const shot = storyboard.find((item) => item.id === shotId) || storyboard[0];
+    const textarea = document.querySelector("[data-video-prompt]");
+    if (textarea) textarea.value = buildReplacementPrompt(shot, policy);
+    showToast("已按当前镜头和背景策略生成完整提示词");
+  }
+  if (action === "copy-full-video-prompt") {
+    const text = document.querySelector("[data-video-prompt]")?.value || "";
+    await copyText(text);
+  }
+  if (action === "copy-video-preset") {
+    await copyText(videoPresetPrompt(button.dataset.preset));
+  }
   if (action === "refresh-runtime") {
     await refreshRuntime();
     showToast("本地项目与任务已刷新");
@@ -2656,6 +2759,7 @@ async function handleAction(button) {
       return;
     }
     const prompt = document.querySelector("[data-video-prompt]")?.value.trim() || "保持参考视频的构图和运镜，替换为当前项目的新郎新娘。";
+    const selectedShotId = document.querySelector("[data-shot-select]")?.value || "template-reference";
     const clip = await api.createTemplateClip(template.id, {
       start: 0,
       duration: Math.min(8, Math.max(4, Number(storyboard[0]?.duration || 5)))
@@ -2668,7 +2772,7 @@ async function handleAction(button) {
     const result = await api.generateVideo({
       projectId: currentProjectId,
       modelId: model.id,
-      shotId: "template-reference",
+      shotId: selectedShotId,
       prompt: `${prompt} 保持参考视频的镜头顺序、人物动作和运镜；把人物替换为男主角${state.groom}和女主角${state.bride}，保持两人面部身份、服装与手部连续，不重演片头。`,
       inputs,
       parameters: { ratio: "adaptive", duration: -1, resolution: model.parameters?.resolution || "720p" }
