@@ -5,10 +5,19 @@ import {
   normalizeProject
 } from "./story-engine.mjs";
 import { api, waitForJob } from "./api.js";
+import {
+  approvalIsCurrent,
+  bindStoryboardToTemplate,
+  formatTimecode,
+  parseRouteHash,
+  routeHash,
+  shotReviewComplete
+} from "./production-model.mjs";
 
 const STORAGE_KEY = "xying-wedding-film-studio-v1";
 
 const DEFAULT_PROJECT = {
+  mode: "story",
   projectName: "我们的婚礼微电影",
   groom: "沈知远",
   bride: "林晚晴",
@@ -575,7 +584,8 @@ const VVV_STYLE_PRESETS = [
 ];
 
 let state = loadState();
-let activeRoute = "overview";
+let activeRouteInfo = parseRouteHash(window.location.hash);
+let activeRoute = routeNameFromInfo(activeRouteInfo);
 let activeFocus = null;
 let selectedMusicMood = "warm-cinematic";
 let openNavIds = new Set([
@@ -768,6 +778,56 @@ function render() {
   content.scrollTop = 0;
   window.scrollTo({ top: 0, behavior: "instant" });
   bindCurrentView();
+}
+
+function routeNameFromInfo(info) {
+  if (info?.page === "story" && info.step) return `step${info.step}`;
+  if (info?.page === "remix" && info.step) return `remixStep${info.step}`;
+  return info?.page || "overview";
+}
+
+function routeInfoFromHash(hash = window.location.hash) {
+  const parsed = parseRouteHash(hash);
+  if (parsed.page === "story" && parsed.step) {
+    return { ...parsed, route: `step${parsed.step}` };
+  }
+  if (parsed.page === "remix" && parsed.step) {
+    return { ...parsed, route: `remixStep${parsed.step}` };
+  }
+  return { ...parsed, route: parsed.page };
+}
+
+function hashForRoute(route) {
+  const storyStep = String(route || "").match(/^step(\d+)$/i);
+  if (storyStep) return routeHash("story", { step: Number(storyStep[1]) });
+  const remixStep = String(route || "").match(/^remixStep(\d+)$/i);
+  if (remixStep) return routeHash("remix", { step: Number(remixStep[1]) });
+  return routeHash(route || "overview");
+}
+
+function navigateTo(route, { replace = false } = {}) {
+  const targetHash = hashForRoute(route);
+  if (window.location.hash === targetHash) {
+    activeRouteInfo = routeInfoFromHash(targetHash);
+    activeRoute = activeRouteInfo.route;
+    render();
+    return;
+  }
+  if (replace) {
+    window.history.replaceState(null, "", targetHash);
+    activeRouteInfo = routeInfoFromHash(targetHash);
+    activeRoute = activeRouteInfo.route;
+    render();
+  } else {
+    window.location.hash = targetHash;
+  }
+}
+
+function restoreRouteFromHash() {
+  activeRouteInfo = routeInfoFromHash();
+  activeRoute = activeRouteInfo.route;
+  if (activeRouteInfo.mode === "remix") state.mode = "remix";
+  render();
 }
 
 function renderNav() {
@@ -1080,7 +1140,7 @@ function wizardPage() {
             <div class="notice red">${icon("sparkle")}<div><strong>${esc(current.subtitle)}</strong>${ready ? "材料已满足本步最低条件。请先人工查看或试听，再确认进入下一步。" : "当前材料仍不完整。完成对应操作后按钮会自动变为可确认。"}</div></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
               <button class="button secondary" data-route="${current.route}">进入本步工作区</button>
-              ${allDone ? '<button class="button primary" data-route="export">查看正式交付</button>' : `<button class="button primary" data-action="approve-workflow-step" ${ready ? "" : "disabled"}>${icon("arrow")}确认本步并继续</button>`}
+              ${allDone ? '<button class="button primary" data-route="export">查看正式交付</button>' : `<button class="button primary" data-action="approve-workflow-step" data-approval-step="${currentStep}" data-approval-mode="${state.mode || "story"}" ${ready ? "" : "disabled"}>${icon("arrow")}确认本步并继续</button>`}
             </div>
           </section>
           <section class="card card-pad">
@@ -1126,7 +1186,7 @@ function workflowStepPage(number) {
         <div><strong>${ready ? "本步骤的最低价材料条件已经满足" : "本步骤仍有材料缺口"}</strong><p>${ready ? "请先实际检查画面或试听，再确认进入下一步。确认记录会随项目保存。" : "返回本页上方或素材中心补齐必要材料后，确认按钮才会开放。"}</p></div>
         <div class="step-confirm-actions">
           ${number > 1 ? `<button class="button ghost small-button" data-route="step${number - 1}">上一步</button>` : ""}
-          <button class="button primary" data-action="approve-workflow-step" ${ready ? "" : "disabled"}>${icon("arrow")}确认并进入第 ${Math.min(14, number + 1)} 步</button>
+          <button class="button primary" data-action="approve-workflow-step" data-approval-step="${number}" data-approval-mode="${activeRouteInfo.mode || state.mode || "story"}" ${ready ? "" : "disabled"}>${icon("arrow")}确认并进入第 ${Math.min(14, number + 1)} 步</button>
         </div>
       </section>
     </div>
@@ -2500,8 +2560,7 @@ document.addEventListener("click", async (event) => {
     }
     if (node?.focus) activeFocus = node.focus;
     if (node?.route) {
-      activeRoute = node.route;
-      render();
+      navigateTo(node.route);
     } else {
       renderNav();
     }
@@ -2510,8 +2569,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (routeButton) {
-    activeRoute = routeButton.dataset.route;
-    render();
+    navigateTo(routeButton.dataset.route);
     document.querySelector(".sidebar").classList.remove("open");
     return;
   }
@@ -2619,24 +2677,50 @@ async function handleAction(button) {
   const action = button.dataset.action;
   if (action === "approve-workflow-step") {
     const workflow = state.workflow || { currentStep: 1, approvals: {} };
-    const step = Math.min(14, Math.max(1, Number(workflow.currentStep || 1)));
+    const mode = button.dataset.approvalMode || activeRouteInfo.mode || state.mode || "story";
+    const maxStep = mode === "remix" ? 4 : 14;
+    const step = Math.min(
+      maxStep,
+      Math.max(
+        1,
+        Number(button.dataset.approvalStep || activeRouteInfo.step || workflow.currentStep || 1)
+      )
+    );
+    if (!runtime.online) {
+      showToast("请先启动本地服务，确认记录必须写入服务端版本库");
+      return;
+    }
     if (!workflowReady(step)) {
       showToast("本步骤素材尚未就绪，请先完成素材中心要求");
       return;
     }
-    state.workflow = {
-      currentStep: Math.min(15, step + 1),
-      approvals: {
-        ...(workflow.approvals || {}),
-        [step]: {
-          approved: true,
-          approvedAt: new Date().toISOString()
-        }
-      }
-    };
+    if (
+      !window.confirm(
+        `确认第 ${step} 步“${mode === "remix" ? "抖音复刻" : WIZARD_STEPS[step - 1]?.title}”当前版本吗？`
+      )
+    ) {
+      return;
+    }
+    const result = await api.approveProjectStep(currentProjectId, {
+      mode,
+      step,
+      confirmText: "确认当前版本",
+      evidence: `制作方在${mode === "remix" ? "抖音复刻" : "故事"}第 ${step} 步页面确认`
+    });
+    state.workflow = result.item.workflow;
+    state.mode = result.item.mode || mode;
     saveState({ quiet: true });
-    render();
-    showToast(step === 14 ? "14 步制作流程已全部确认" : `第 ${step} 步已确认，进入第 ${step + 1} 步`);
+    const nextStep = Math.min(maxStep + 1, step + 1);
+    if (mode === "remix") {
+      navigateTo(nextStep > 4 ? "export" : `remixStep${nextStep}`);
+    } else {
+      navigateTo(nextStep > 14 ? "export" : `step${nextStep}`);
+    }
+    showToast(
+      step === maxStep
+        ? `${maxStep} 步制作流程已全部确认`
+        : `第 ${step} 步已确认，进入第 ${step + 1} 步`
+    );
   }
   if (action === "reset-workflow") {
     state.workflow = { currentStep: 1, approvals: {} };
@@ -3530,7 +3614,11 @@ function addMobileMenu() {
 
 addMobileMenu();
 initAmbient();
-render();
+window.addEventListener("hashchange", restoreRouteFromHash);
+if (!window.location.hash) {
+  window.history.replaceState(null, "", hashForRoute("overview"));
+}
+restoreRouteFromHash();
 refreshRuntime({ rerender: true }).then(() => {
   if (!runtime.online) {
     showToast("本地模型服务未连接，请运行 npm start");

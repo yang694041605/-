@@ -28,16 +28,22 @@ await writeFile(
 
 const indexHtml = await readFile(resolve(root, "index.html"), "utf8");
 const styles = await readFile(resolve(root, "src", "styles.css"), "utf8");
-const engine = (await readFile(resolve(root, "src", "story-engine.mjs"), "utf8")).replace(
-  /^export\s+/gm,
-  ""
-);
+const productionModel = (
+  await readFile(resolve(root, "src", "production-model.mjs"), "utf8")
+).replace(/^export\s+/gm, "");
+const engine = (await readFile(resolve(root, "src", "story-engine.mjs"), "utf8"))
+  .replace(
+    /import\s*\{[\s\S]*?\}\s*from\s*"\.\/production-model\.mjs";\s*/,
+    ""
+  )
+  .replace(/^export\s+/gm, "");
 const apiSource = (await readFile(resolve(root, "src", "api.js"), "utf8")).replace(
   /^export\s+/gm,
   ""
 );
 const appSource = (await readFile(resolve(root, "src", "app.js"), "utf8"))
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/story-engine\.mjs";\s*/, "")
+  .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/production-model\.mjs";\s*/, "")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/api\.js";\s*/, "");
 const standaloneHtml = indexHtml
   .replace(
@@ -46,7 +52,7 @@ const standaloneHtml = indexHtml
   )
   .replace(
     '<script type="module" src="./src/app.js"></script>',
-    `<script type="module">\n${apiSource}\n${engine}\n${appSource}\n</script>`
+    `<script type="module">\n${apiSource}\n${productionModel}\n${engine}\n${appSource}\n</script>`
   );
 await writeFile(resolve(dist, "婚礼微电影创作台.html"), standaloneHtml, "utf8");
 
