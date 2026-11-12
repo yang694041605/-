@@ -297,6 +297,7 @@ export function approvalIsCurrent(approval, snapshot) {
   return (
     approval.fingerprint === snapshot.fingerprint &&
     approval.timelineHash === snapshot.timelineHash &&
+    approval.contentHash === snapshot.contentHash &&
     JSON.stringify(approval.assetHashes || {}) ===
       JSON.stringify(snapshot.assetHashes || {}) &&
     JSON.stringify(approval.promptVersions || {}) ===

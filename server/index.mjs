@@ -294,22 +294,24 @@ async function handleApi(request, response, url) {
         error: "时间轴已变化，请重新检查并确认当前版本"
       });
     }
-    const requiredStep = projectView.mode === "remix" ? 3 : 9;
     const workflow =
       projectView.mode === "remix" ? project.remixWorkflow : project.workflow;
-    const renderApproval = workflow?.approvals?.[requiredStep];
-    const renderSnapshot = approvalSnapshot(projectView, assets, {
-      mode: projectView.mode,
-      step: requiredStep
-    });
-    if (!approvalIsCurrent(renderApproval, renderSnapshot)) {
-      return sendJson(response, 409, {
-        ok: false,
-        error:
-          projectView.mode === "remix"
-            ? "复刻第 3 步尚未按当前素材确认，或素材已变化"
-            : "故事第 9 步尚未按当前素材确认，或素材已变化"
+    const requiredSteps = projectView.mode === "remix" ? [3] : [9, 12];
+    for (const requiredStep of requiredSteps) {
+      const renderApproval = workflow?.approvals?.[requiredStep];
+      const renderSnapshot = approvalSnapshot(projectView, assets, {
+        mode: projectView.mode,
+        step: requiredStep
       });
+      if (!approvalIsCurrent(renderApproval, renderSnapshot)) {
+        return sendJson(response, 409, {
+          ok: false,
+          error:
+            projectView.mode === "remix"
+              ? "复刻第 3 步尚未按当前素材确认，或素材已变化"
+              : `故事第 ${requiredStep} 步尚未按当前素材确认，或素材已变化`
+        });
+      }
     }
     let resolved;
     try {
@@ -486,7 +488,9 @@ async function handleApi(request, response, url) {
     }
     if (
       patch.status === "approved" &&
-      !shotReviewComplete(patch.review || current.review || {})
+      (!shotReviewComplete(patch.review || current.review || {}) ||
+        !(patch.review || current.review || {}).reviewedBy ||
+        !(patch.review || current.review || {}).reviewedAt)
     ) {
       return sendJson(response, 409, {
         ok: false,
@@ -1292,11 +1296,11 @@ function migrateProjectRecords() {
     const shotFrames = normalizedShots.reduce((sum, shot) => sum + shot.frames, 0);
     const projectFrames = Math.round(Number(project.duration || 0) * 24);
     const legacyStoryApprovals = Object.values(project.workflow?.approvals || {}).some(
-      (approval) => !approval?.fingerprint
+      (approval) => !approval?.fingerprint || !approval?.contentHash
     );
     const legacyRemixApprovals = Object.values(
       project.remixWorkflow?.approvals || {}
-    ).some((approval) => !approval?.fingerprint);
+    ).some((approval) => !approval?.fingerprint || !approval?.contentHash);
     const workflow = legacyStoryApprovals
       ? {
           currentStep: 1,

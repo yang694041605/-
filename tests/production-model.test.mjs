@@ -113,6 +113,7 @@ test("审批指纹变化后旧确认立即失效", () => {
     step: 8,
     fingerprint: "hash-a",
     timelineHash: "timeline-a",
+    contentHash: "content-a",
     assetHashes: { "asset-1": "asset-a" },
     promptVersions: { "shot-01": 1 }
   };
@@ -120,6 +121,7 @@ test("审批指纹变化后旧确认立即失效", () => {
     approvalIsCurrent(approval, {
       fingerprint: "hash-a",
       timelineHash: "timeline-a",
+      contentHash: "content-a",
       assetHashes: { "asset-1": "asset-a" },
       promptVersions: { "shot-01": 1 }
     }),
@@ -129,6 +131,7 @@ test("审批指纹变化后旧确认立即失效", () => {
     approvalIsCurrent(approval, {
       fingerprint: "hash-a",
       timelineHash: "timeline-b",
+      contentHash: "content-a",
       assetHashes: { "asset-1": "asset-a" },
       promptVersions: { "shot-01": 1 }
     }),

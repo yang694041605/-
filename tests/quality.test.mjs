@@ -41,6 +41,7 @@ test("素材或提示词版本变化会让旧审批失效", () => {
     approved: true,
     fingerprint: "shake-8",
     timelineHash: "timeline-1",
+    contentHash: "content-1",
     assetHashes: { "asset-video-1": "hash-a" },
     promptVersions: { "shot-01": 2 }
   };
@@ -48,6 +49,7 @@ test("素材或提示词版本变化会让旧审批失效", () => {
     approvalIsCurrent(approval, {
       fingerprint: "shake-8",
       timelineHash: "timeline-1",
+      contentHash: "content-1",
       assetHashes: { "asset-video-1": "hash-a" },
       promptVersions: { "shot-01": 2 }
     }),
@@ -57,7 +59,18 @@ test("素材或提示词版本变化会让旧审批失效", () => {
     approvalIsCurrent(approval, {
       fingerprint: "shake-8",
       timelineHash: "timeline-1",
+      contentHash: "content-1",
       assetHashes: { "asset-video-1": "hash-b" },
+      promptVersions: { "shot-01": 2 }
+    }),
+    false
+  );
+  assert.equal(
+    approvalIsCurrent(approval, {
+      fingerprint: "shake-8",
+      timelineHash: "timeline-1",
+      contentHash: "content-2",
+      assetHashes: { "asset-video-1": "hash-a" },
       promptVersions: { "shot-01": 2 }
     }),
     false

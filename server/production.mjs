@@ -162,11 +162,41 @@ export function approvalSnapshot(project, assets, { mode, step }) {
       `${Number(shot.promptVersion?.version || 1)}:${shot.promptVersion?.hash || sha256Text(String(shot.prompt || ""))}`
     ])
   );
+  const contentHash = sha256Text(
+    stableStringify({
+      groom: project.groom || "",
+      bride: project.bride || "",
+      weddingDate: project.weddingDate || project.date || "",
+      city: project.city || "",
+      story: project.story || "",
+      storyBeats: project.storyBeats || {},
+      duration: project.duration,
+      theme: project.theme || "",
+      tone: project.tone || "",
+      aspect: project.aspect || "",
+      templateId: project.templateId || "",
+      treatment: project.treatment || null,
+      remixTargets: project.remixTargets || null,
+      remixRange: project.remixRange || null,
+      storyboard: (project.storyboard || []).map((shot) => ({
+        id: shot.id,
+        start: shot.start,
+        end: shot.end,
+        frames: shot.frames,
+        prompt: shot.prompt || "",
+        source: shot.source || null,
+        characters: shot.characters || null,
+        status: shot.status || "",
+        review: shot.review || {}
+      }))
+    })
+  );
   const payload = {
     projectId: project.id,
     mode: mode === "remix" ? "remix" : "story",
     step: Number(step),
     timelineHash: timeline.hash,
+    contentHash,
     assetHashes,
     promptVersions
   };
@@ -199,6 +229,7 @@ export function approveStep(project, { mode, step, snapshot, evidence }) {
         evidence: String(evidence || "").trim() || "未填写确认依据",
         fingerprint: snapshot.fingerprint,
         timelineHash: snapshot.timelineHash,
+        contentHash: snapshot.contentHash,
         assetHashes: snapshot.assetHashes || {},
         promptVersions: snapshot.promptVersions || {}
       }
