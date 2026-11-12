@@ -45,6 +45,7 @@ import { checkVvv, createVvvProject, findVvvRoot } from "./vvv.mjs";
 import {
   approvalSnapshot,
   approveStep,
+  assertInside,
   buildProjectTimeline,
   rejectFilesystemPathKeys,
   sha256File,
@@ -53,6 +54,8 @@ import {
 } from "./production.mjs";
 
 seedDefaults();
+migrateProjectRecords();
+await migrateAssetHashes();
 
 const port = Number(process.env.PORT || 4173);
 const host = "127.0.0.1";
@@ -168,6 +171,11 @@ async function handleApi(request, response, url) {
 
   if (path === "/api/projects" && method === "POST") {
     const body = await readJson(request);
+    try {
+      rejectFilesystemPathKeys(body);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
     const project = saveEntity("project", {
       ...body,
       id: body.id || id("project"),
@@ -185,6 +193,11 @@ async function handleApi(request, response, url) {
   }
   if (projectMatch && method === "PUT") {
     const body = await readJson(request);
+    try {
+      rejectFilesystemPathKeys(body);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
     const project = updateEntity("project", projectMatch[1], body);
     return project
       ? sendJson(response, 200, { ok: true, item: project })
@@ -307,7 +320,8 @@ async function handleApi(request, response, url) {
     });
     const project = updateEntity("project", projectPhotoMatch[1], (current) => ({
       photos: { ...current.photos, [role]: asset.url },
-      photoSources: { ...(current.photoSources || {}), [role]: asset.localPath }
+      photoSources: { ...(current.photoSources || {}), [role]: asset.localPath },
+      photoAssetIds: { ...(current.photoAssetIds || {}), [role]: asset.id }
     }));
     return sendJson(response, 201, { ok: true, asset, project });
   }
@@ -373,11 +387,15 @@ async function handleApi(request, response, url) {
     const body = await readJson(request);
     const template = getEntity("template", templateApplyMatch[1]);
     if (!template) return sendJson(response, 404, { ok: false, error: "模板不存在" });
-    const project = updateEntity("project", body.projectId, {
+    const project = updateEntity("project", body.projectId, (current) => ({
       templateId: template.id,
-      duration: body.duration || template.duration || 40,
-      aspect: body.aspect || template.aspect || "16:9"
-    });
+      referenceDuration: Number(template.duration || 0),
+      duration: body.duration
+        ? Number(body.duration)
+        : Number(current.duration || 40),
+      aspect: body.aspect || template.aspect || current.aspect || "16:9",
+      timelineRevision: Number(current.timelineRevision || 1) + 1
+    }));
     return project
       ? sendJson(response, 200, { ok: true, item: project })
       : sendJson(response, 404, { ok: false, error: "项目不存在" });
@@ -389,14 +407,39 @@ async function handleApi(request, response, url) {
     const template = getEntity("template", templateClipMatch[1]);
     if (!template) return sendJson(response, 404, { ok: false, error: "模板不存在" });
     const start = Math.max(0, Number(body.start || 0));
-    const duration = Math.min(30, Math.max(4, Number(body.duration || 5)));
-    const targetDir = resolve(mediaRoot, "generated", id("template-clip"));
+    const duration = Math.min(8, Math.max(0.5, Number(body.duration || 5)));
+    const clipId = id("asset");
+    const targetDir = resolve(mediaRoot, "generated", clipId);
     await mkdir(targetDir, { recursive: true });
     const localPath = resolve(targetDir, "reference.mp4");
     await extractVideoSegment(template.videoPath, localPath, start, duration);
+    const asset = saveEntity("asset", {
+      id: clipId,
+      kind: "template-clip",
+      projectId: body.projectId || "",
+      ownerId: body.projectId || "",
+      templateId: template.id,
+      title: `${template.title} · ${start.toFixed(2)}–${(start + duration).toFixed(2)} 秒`,
+      localPath,
+      url: mediaUrlForPath(localPath),
+      mimeType: "video/mp4",
+      sourceStart: start,
+      sourceEnd: start + duration,
+      contentHash: await sha256File(localPath),
+      version: 1,
+      media: await probeMedia(localPath).catch(() => null)
+    });
     return sendJson(response, 201, {
       ok: true,
-      item: { localPath, url: mediaUrlForPath(localPath), start, duration, templateId: template.id }
+      item: {
+        assetId: asset.id,
+        url: asset.url,
+        start,
+        duration,
+        templateId: template.id,
+        contentHash: asset.contentHash
+      },
+      asset
     });
   }
 
@@ -449,7 +492,12 @@ async function handleApi(request, response, url) {
         lookId: look.id,
         prompt: buildLookPrompt(look),
         projectId: body.projectId || "project-default",
-        referencePath: body.referencePath || ""
+        referencePath: body.referenceAssetId
+          ? resolveGenerationInputs(
+              [`reference_image:${body.referenceAssetId}`],
+              body.projectId || ""
+            )[0].slice("reference_image:".length)
+          : ""
       }
     });
     queueJob(job.id, () => generateLook(job.id));
@@ -511,12 +559,18 @@ async function handleApi(request, response, url) {
     } catch (error) {
       return sendJson(response, 400, { ok: false, error: safeError(error) });
     }
+    let inputs = [];
+    try {
+      inputs = resolveGenerationInputs(body.inputs || [], body.projectId || "");
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
     const job = createJob("image-generation", {
       modelId: body.modelId || "",
       projectId: body.projectId || "",
       input: {
         prompt: body.prompt || "",
-        inputs: body.inputs || [],
+        inputs,
         lookId: body.lookId || "",
         kind: body.kind || "image"
       }
@@ -532,12 +586,18 @@ async function handleApi(request, response, url) {
     } catch (error) {
       return sendJson(response, 400, { ok: false, error: safeError(error) });
     }
+    let inputs = [];
+    try {
+      inputs = resolveGenerationInputs(body.inputs || [], body.projectId || "");
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
     const job = createJob("video-generation", {
       modelId: body.modelId || "",
       projectId: body.projectId || "",
       input: {
         prompt: body.prompt || "",
-        inputs: body.inputs || [],
+        inputs,
         shotId: body.shotId || "",
         parameters: body.parameters || {}
       }
@@ -576,7 +636,9 @@ async function handleApi(request, response, url) {
       mimeType: model?.provider === "windows-sapi" ? "audio/wav" : "audio/mpeg",
       provider: model?.provider || "edge-tts",
       model: model?.model || "",
-      projectId: body.projectId || ""
+      projectId: body.projectId || "",
+      contentHash: await sha256File(outputPath),
+      version: 1
     });
     return sendJson(response, 201, { ok: true, item: asset, url: `/media/audio/${basename(outputPath)}` });
   }
@@ -596,7 +658,9 @@ async function handleApi(request, response, url) {
       mimeType: "audio/wav",
       provider: "xying-original",
       model: "xying-wedding-score-v1",
-      projectId: body.projectId || ""
+      projectId: body.projectId || "",
+      contentHash: await sha256File(outputPath),
+      version: 1
     });
     return sendJson(response, 201, { ok: true, item: asset, url: `/media/audio/${basename(outputPath)}` });
   }
@@ -618,7 +682,9 @@ async function handleApi(request, response, url) {
       url: mediaUrlForPath(subtitlePath),
       mimeType: "application/x-subrip",
       projectId: body.projectId || "",
-      lines
+      lines,
+      contentHash: await sha256File(subtitlePath),
+      version: 1
     });
     return sendJson(response, 201, { ok: true, item: asset });
   }
@@ -717,7 +783,7 @@ async function handleApi(request, response, url) {
     if (!job) return sendJson(response, 404, { ok: false, error: "任务不存在" });
     if (job.kind === "video-generation" && job.providerTaskId) {
       const result = await queryVideoTask(job.providerTaskId, resolve(mediaRoot, "generated"));
-      const updated = applyVideoQuery(job, result);
+      const updated = await applyVideoQuery(job, result);
       return sendJson(response, 200, { ok: true, item: updated });
     }
     return sendJson(response, 200, { ok: true, item: job });
@@ -764,6 +830,130 @@ function projectAssets(projectId) {
   return listEntities("asset", 2000).filter(
     (asset) => asset.projectId === projectId || asset.ownerId === projectId
   );
+}
+
+function resolveGenerationInputs(inputs, projectId = "") {
+  if (!Array.isArray(inputs)) return [];
+  return inputs.map((entry) => {
+    const raw = String(entry || "");
+    const separator = raw.indexOf(":");
+    if (separator < 1) throw new Error("生成素材必须使用“角色:资产ID”格式");
+    const role = raw.slice(0, separator);
+    const value = raw.slice(separator + 1);
+    if (/^https?:\/\//i.test(value)) return `${role}:${value}`;
+    if (/^[A-Za-z]:[\\/]/.test(value) || value.startsWith("/") || value.startsWith("\\\\")) {
+      throw new Error("生成接口不接受文件路径，请提交素材资产 ID");
+    }
+    const asset = getEntity("asset", value);
+    if (!asset) throw new Error(`素材资产不存在：${value}`);
+    if (projectId && asset.projectId && asset.projectId !== projectId) {
+      throw new Error("不能引用其他项目的素材");
+    }
+    const localPath = assertInside(mediaRoot, asset.localPath);
+    return `${role}:${localPath}`;
+  });
+}
+
+function migrateProjectRecords() {
+  for (const project of listEntities("project", 2000)) {
+    const shots = Array.isArray(project.storyboard) ? project.storyboard : [];
+    const normalizedShots = shots.map((shot, index) => {
+      const frames =
+        Number(shot.frames) ||
+        Math.max(1, Math.round((Number(shot.end || 0) - Number(shot.start || 0)) * 24));
+      return {
+        ...shot,
+        order: shot.order || index + 1,
+        frames,
+        startFrame:
+          shot.startFrame == null ? Math.round(Number(shot.start || 0) * 24) : shot.startFrame,
+        endFrame:
+          shot.endFrame == null
+            ? Math.round(Number(shot.start || 0) * 24) + frames
+            : shot.endFrame,
+        promptVersion:
+          shot.promptVersion || {
+            version: 1,
+            hash: "",
+            text: String(shot.prompt || "")
+          },
+        assets: shot.assets || { firstFrame: null, video: null, finalClip: null },
+        review: shot.review || {
+          identity: "pending",
+          crossFace: "pending",
+          hands: "pending",
+          actionMatch: "pending",
+          backgroundDrift: "pending",
+          blackBars: "pending",
+          subtitleSafety: "pending",
+          audioSync: "pending"
+        },
+        status:
+          shot.status === "已确认"
+            ? "human-review"
+            : shot.status === "待生成"
+              ? "draft"
+              : shot.status || "draft"
+      };
+    });
+    const shotFrames = normalizedShots.reduce((sum, shot) => sum + shot.frames, 0);
+    const projectFrames = Math.round(Number(project.duration || 0) * 24);
+    const shouldRepairDuration =
+      shotFrames > 0 && Math.abs(shotFrames - projectFrames) > 1;
+    const assets = projectAssets(project.id);
+    const photoAssetIds = {
+      groom:
+        project.photoAssetIds?.groom ||
+        assets.find(
+          (asset) =>
+            asset.kind === "photo" &&
+            project.photoSources?.groom &&
+            resolve(asset.localPath) === resolve(project.photoSources.groom)
+        )?.id ||
+        "",
+      bride:
+        project.photoAssetIds?.bride ||
+        assets.find(
+          (asset) =>
+            asset.kind === "photo" &&
+            project.photoSources?.bride &&
+            resolve(asset.localPath) === resolve(project.photoSources.bride)
+        )?.id ||
+        ""
+    };
+    const duration = shouldRepairDuration ? shotFrames / 24 : Number(project.duration || 40);
+    if (
+      shouldRepairDuration ||
+      !project.mode ||
+      !project.timelineRevision ||
+      !project.photoAssetIds ||
+      normalizedShots.some((shot, index) => shot.status !== shots[index]?.status)
+    ) {
+      updateEntity("project", project.id, {
+        mode: project.mode || "story",
+        duration,
+        legacyDuration: shouldRepairDuration
+          ? Number(project.legacyDuration || project.duration || 0)
+          : project.legacyDuration,
+        referenceDuration:
+          Number(project.referenceDuration || 0) ||
+          (project.templateId && shouldRepairDuration ? Number(project.duration || 0) : 0),
+        storyboard: normalizedShots,
+        photoAssetIds,
+        timelineRevision: Number(project.timelineRevision || 1)
+      });
+    }
+  }
+}
+
+async function migrateAssetHashes() {
+  for (const asset of listEntities("asset", 5000)) {
+    if (asset.contentHash || !asset.localPath) continue;
+    const contentHash = await sha256File(asset.localPath).catch(() => "");
+    if (contentHash) {
+      updateEntity("asset", asset.id, { contentHash, version: asset.version || 1 });
+    }
+  }
 }
 
 async function receiveUpload(request, { kind, ownerId = "", preferredName = "upload" }) {
@@ -976,6 +1166,7 @@ async function generateLook(jobId) {
           parameters: model.parameters
         });
   const localPath = firstLocalPath(result);
+  const contentHash = localPath ? await sha256File(localPath).catch(() => "") : "";
   const asset = saveEntity("asset", {
     id: id("asset"),
     kind: "look-image",
@@ -987,7 +1178,9 @@ async function generateLook(jobId) {
     outputUrl: result.output_url || "",
     provider: result.provider,
     model: model.model,
-    jobId: job.id
+    jobId: job.id,
+    contentHash,
+    version: 1
   });
   if (job.input.lookId && localPath) {
     updateEntity("look", job.input.lookId, {
@@ -1055,6 +1248,7 @@ async function generateImageJob(jobId) {
           parameters: model.parameters
         });
   const localPath = firstLocalPath(result);
+  const contentHash = localPath ? await sha256File(localPath).catch(() => "") : "";
   const asset = saveEntity("asset", {
     id: id("asset"),
     kind: job.input.kind || "image",
@@ -1065,7 +1259,9 @@ async function generateImageJob(jobId) {
     outputUrl: result.output_url || "",
     provider: result.provider,
     model: model.model,
-    jobId: job.id
+    jobId: job.id,
+    contentHash,
+    version: 1
   });
   updateJob(jobId, {
     status: "succeeded",
@@ -1112,7 +1308,7 @@ function scheduleVideoPolling(jobId, outputDir, attempt = 0) {
     if (!job || ["succeeded", "failed", "cancelled"].includes(job.status)) return;
     try {
       const result = await queryVideoTask(job.providerTaskId, outputDir);
-      const updated = applyVideoQuery(job, result);
+      const updated = await applyVideoQuery(job, result);
       if (!["succeeded", "failed", "cancelled"].includes(updated.status) && attempt < 180) {
         scheduleVideoPolling(jobId, outputDir, attempt + 1);
       }
@@ -1128,11 +1324,12 @@ function scheduleVideoPolling(jobId, outputDir, attempt = 0) {
   resumeTimers.add(timer);
 }
 
-function applyVideoQuery(job, result) {
+async function applyVideoQuery(job, result) {
   const phase = result.status?.phase || result.status || "running";
   if (["succeeded", "failed", "cancelled"].includes(phase)) {
     if (phase === "succeeded") {
       const localPath = firstLocalPath(result);
+      const contentHash = localPath ? await sha256File(localPath).catch(() => "") : "";
       const asset = saveEntity("asset", {
         id: id("asset"),
         kind: "video",
@@ -1144,7 +1341,9 @@ function applyVideoQuery(job, result) {
         provider: "volcengine-ark",
         model: job.modelId,
         jobId: job.id,
-        providerTaskId: job.providerTaskId
+        providerTaskId: job.providerTaskId,
+        contentHash,
+        version: 1
       });
       return updateJob(job.id, {
         status: "succeeded",

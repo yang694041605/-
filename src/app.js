@@ -11,6 +11,7 @@ import {
   formatTimecode,
   parseRouteHash,
   routeHash,
+  shotReferenceWindow,
   shotReviewComplete
 } from "./production-model.mjs";
 
@@ -633,6 +634,7 @@ function saveState({ quiet = false } = {}) {
     if (runtime.online) {
       api
         .updateProject(currentProjectId, {
+          mode: state.mode,
           name: state.projectName,
           groom: state.groom,
           bride: state.bride,
@@ -641,11 +643,13 @@ function saveState({ quiet = false } = {}) {
           story: state.story,
           storyBeats: state.storyBeats,
           duration: state.duration,
+          referenceDuration: state.referenceDuration,
           theme: state.theme,
           tone: state.tone,
           aspect: state.aspect,
           treatment,
           storyboard,
+          photoAssetIds: state.photoAssetIds,
           selectedLooks: state.selectedLooks,
           workflow: state.workflow,
           vvvStyle: state.vvvStyle
@@ -679,6 +683,7 @@ async function refreshRuntime({ rerender = true } = {}) {
       state = normalizeProject({
         ...state,
         projectName: project.name || state.projectName,
+        mode: project.mode || state.mode,
         groom: project.groom || state.groom,
         bride: project.bride || state.bride,
         date: project.weddingDate || state.date,
@@ -686,6 +691,8 @@ async function refreshRuntime({ rerender = true } = {}) {
         story: project.story || state.story,
         storyBeats: project.storyBeats || state.storyBeats,
         duration: project.duration || state.duration,
+        referenceDuration:
+          project.referenceDuration || state.referenceDuration || 0,
         theme: project.theme || state.theme,
         tone: project.tone || state.tone,
         aspect: project.aspect || state.aspect,
@@ -693,9 +700,11 @@ async function refreshRuntime({ rerender = true } = {}) {
           groom: project.photos?.groom || state.photos.groom,
           bride: project.photos?.bride || state.photos.bride
         },
+        photoAssetIds: project.photoAssetIds || state.photoAssetIds,
         photoSources: project.photoSources || state.photoSources,
         selectedLooks: project.selectedLooks || state.selectedLooks,
         workflow: project.workflow || state.workflow,
+        timelineRevision: project.timelineRevision || state.timelineRevision,
         vvvStyle: project.vvvStyle || state.vvvStyle
       });
       treatment = buildStoryTreatment(state);
@@ -704,6 +713,8 @@ async function refreshRuntime({ rerender = true } = {}) {
       if (Array.isArray(project.storyboard) && project.storyboard.length) {
         storyboard = project.storyboard;
       }
+      const template = runtime.templates.find((item) => item.id === project.templateId);
+      storyboard = bindStoryboardToTemplate(storyboard, template);
     }
   } catch {
     runtime.online = false;
@@ -1396,10 +1407,21 @@ function buildReplacementPrompt(shot = storyboard[0], policy = "keep") {
     policy === "change"
       ? `背景替换为${state.city || "现代"}婚礼场景。新背景的地平线、主光方向、色温和阴影必须与人物动作匹配，保留脚底接触阴影、手部接触关系、服装边缘和头发轮廓，不得出现漂浮、抠图边或遮挡错误。`
       : "严格保留参考视频中的建筑、道具、空间透视、背景材质、主光方向和环境色。";
+  const referenceRange =
+    selectedShot.source?.referenceStart != null &&
+    selectedShot.source?.referenceEnd != null
+      ? `${Number(selectedShot.source.referenceStart).toFixed(2)}–${Number(
+          selectedShot.source.referenceEnd
+        ).toFixed(2)} 秒`
+      : "未绑定，必须先建立模板镜头区间";
+  const replacementTargets = selectedShot.characters
+    ? `男主替换目标=${selectedShot.characters.groom?.target || "未指定"}；女主替换目标=${selectedShot.characters.bride?.target || "未指定"}。`
+    : "替换目标将在第 3 步明确为左侧人物、右侧人物或检测到的人物编号。";
   return [
     "【任务】参考视频人物替换",
+    `【模板区间】${referenceRange}`,
     `【参考视频】${selectedShot.title}，原片场景为${selectedShot.scene}，动作目标：${selectedShot.prompt || "保持原参考动作"}`,
-    `【人物身份】男主角=${state.groom}，女主角=${state.bride}；使用上传的男女主照片作为唯一面容身份参考，不改变成年面部比例。`,
+    `【人物身份】男主角=${state.groom}，女主角=${state.bride}；使用上传的男女主照片作为唯一面容身份参考，不改变成年面部比例。${replacementTargets}`,
     `【输出规格】${state.aspect}，约 ${selectedShot.duration || 5} 秒，真人电影级写实，24 FPS 成片，真实皮肤、头发、织物、金属和环境材质。`,
     `【本镜起始】以模板本镜首帧的构图、人物站位、视线、服装轮廓和受光为起始状态。`,
     `【动作过程】${selectedShot.prompt || "人物按参考视频动作自然移动"}；动作有重心、惯性和正确接触关系，手部结构正确。`,
@@ -2538,6 +2560,21 @@ function bindCurrentView() {
       if (file) await processPhoto(file, zone.dataset.dropzone);
     });
   });
+
+  const shotSelect = document.querySelector("[data-shot-select]");
+  const backgroundPolicy = document.querySelector("[data-background-policy]");
+  const promptArea = document.querySelector("[data-video-prompt]");
+  const syncPrompt = () => {
+    if (!shotSelect || !promptArea) return;
+    const shot =
+      storyboard.find((item) => item.id === shotSelect.value) || storyboard[0];
+    promptArea.value = buildReplacementPrompt(
+      shot,
+      backgroundPolicy?.value || "keep"
+    );
+  };
+  shotSelect?.addEventListener("change", syncPrompt);
+  backgroundPolicy?.addEventListener("change", syncPrompt);
 }
 
 document.addEventListener("click", async (event) => {
@@ -2844,13 +2881,57 @@ async function handleAction(button) {
     }
     const prompt = document.querySelector("[data-video-prompt]")?.value.trim() || "保持参考视频的构图和运镜，替换为当前项目的新郎新娘。";
     const selectedShotId = document.querySelector("[data-shot-select]")?.value || "template-reference";
+    const selectedShot =
+      storyboard.find((item) => item.id === selectedShotId) || storyboard[0];
+    if (!selectedShot) {
+      showToast("请先建立故事分镜");
+      return;
+    }
+    let referenceWindow;
+    try {
+      referenceWindow = shotReferenceWindow(selectedShot, 8);
+    } catch (error) {
+      showToast("当前镜头还没有绑定模板时间区间，请先应用并解析模板");
+      return;
+    }
     const clip = await api.createTemplateClip(template.id, {
-      start: 0,
-      duration: Math.min(8, Math.max(4, Number(storyboard[0]?.duration || 5)))
+      projectId: currentProjectId,
+      start: referenceWindow.start,
+      duration: referenceWindow.duration
     });
-    const inputs = [`reference_video:${clip.item.localPath}`];
-    if (state.photoSources?.groom) inputs.push(`reference_image:${state.photoSources.groom}`);
-    if (state.photoSources?.bride) inputs.push(`reference_image:${state.photoSources.bride}`);
+    const photoAssetIds =
+      state.photoAssetIds ||
+      runtime.projects.find((item) => item.id === currentProjectId)?.photoAssetIds ||
+      {};
+    if (!photoAssetIds.groom || !photoAssetIds.bride) {
+      showToast("请先上传并绑定当前项目的男女主照片资产");
+      return;
+    }
+    const inputs = [
+      `reference_video:${clip.item.assetId}`,
+      `reference_image:${photoAssetIds.groom}`,
+      `reference_image:${photoAssetIds.bride}`
+    ];
+    await api.updateShot(currentProjectId, selectedShot.id, {
+      prompt,
+      source: {
+        ...(selectedShot.source || {}),
+        mode: "template",
+        templateId: template.id,
+        referenceStart: referenceWindow.start,
+        referenceEnd: referenceWindow.start + referenceWindow.duration
+      },
+      characters: {
+        groom: {
+          referenceAssetId: photoAssetIds.groom,
+          target: selectedShot.characters?.groom?.target || "男主角"
+        },
+        bride: {
+          referenceAssetId: photoAssetIds.bride,
+          target: selectedShot.characters?.bride?.target || "女主角"
+        }
+      }
+    });
     button.disabled = true;
     button.textContent = "提交人物替换镜头…";
     const result = await api.generateVideo({
@@ -2861,7 +2942,23 @@ async function handleAction(button) {
       inputs,
       parameters: { ratio: "adaptive", duration: -1, resolution: model.parameters?.resolution || "720p" }
     });
-    await trackJob(result.job.id, "模板人物替换镜头");
+    const job = await trackJob(result.job.id, "模板人物替换镜头");
+    if (job?.result?.asset) {
+      await api.updateShot(currentProjectId, selectedShot.id, {
+        assets: {
+          ...(selectedShot.assets || {}),
+          video: {
+            assetId: job.result.asset.id,
+            hash: job.result.asset.contentHash || ""
+          },
+          finalClip: {
+            assetId: job.result.asset.id,
+            hash: job.result.asset.contentHash || ""
+          }
+        },
+        status: "human-review"
+      });
+    }
     await refreshRuntime();
   }
   if (action === "import-template-url") {
@@ -2884,7 +2981,13 @@ async function handleAction(button) {
   if (action === "apply-template") {
     await api.applyTemplate(button.dataset.templateId, currentProjectId);
     await refreshRuntime();
-    showToast("模板已应用到当前婚礼项目");
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    const template = runtime.templates.find((item) => item.id === project?.templateId);
+    storyboard = bindStoryboardToTemplate(buildStoryboard(state), template);
+    state.storyboard = storyboard;
+    saveState({ quiet: true });
+    render();
+    showToast("模板已应用，项目时长保持不变，参考片时长单独记录");
   }
   if (action === "use-vvv-style") {
     const preset = VVV_STYLE_PRESETS.find((item) => item.id === button.dataset.vvvId);
@@ -2987,7 +3090,8 @@ async function handleAction(button) {
     button.textContent = "提交中…";
     const result = await api.generateLook(look.id, {
       projectId: currentProjectId,
-      referencePath: state.photos[look.gender === "male" ? "groom" : "bride"] || "",
+      referenceAssetId:
+        state.photoAssetIds?.[look.gender === "male" ? "groom" : "bride"] || "",
       modelId: button.dataset.modelId || ""
     });
     showToast(`造型生成任务已创建：${look.title}`);
@@ -3180,7 +3284,12 @@ async function handleAction(button) {
   }
   if (action === "build-storyboard") {
     storyboard = buildStoryboard(state);
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    const template = runtime.templates.find((item) => item.id === project?.templateId);
+    storyboard = bindStoryboardToTemplate(storyboard, template);
     treatment = buildStoryTreatment(state);
+    state.storyboard = storyboard;
+    saveState({ quiet: true });
     showToast("已重新推导分镜，总帧数按 24 FPS 校验");
     render();
   }
@@ -3196,7 +3305,10 @@ async function handleAction(button) {
     document.querySelector(`#photo-${gender}`)?.click();
   }
   if (action === "remove-photo") {
-    state.photos[button.dataset.gender] = "";
+    const gender = button.dataset.gender;
+    state.photos[gender] = "";
+    state.photoSources[gender] = "";
+    if (state.photoAssetIds) state.photoAssetIds[gender] = "";
     saveState({ quiet: true });
     render();
     showToast("人物照片已从项目草稿移除");
@@ -3262,6 +3374,10 @@ async function processPhoto(file, gender) {
     if (runtime.online) {
       const uploaded = await api.uploadProjectPhoto(currentProjectId, gender, file);
       photoUrl = api.mediaUrl(uploaded.asset.url);
+      state.photoAssetIds = {
+        ...(state.photoAssetIds || {}),
+        [gender]: uploaded.asset.id
+      };
     }
     state.photos[gender] = photoUrl;
     saveState({ quiet: true });
@@ -3399,6 +3515,10 @@ function rebuildProject() {
   state = normalizeProject(state);
   treatment = buildStoryTreatment(state);
   storyboard = buildStoryboard(state);
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  const template = runtime.templates.find((item) => item.id === project?.templateId);
+  storyboard = bindStoryboardToTemplate(storyboard, template);
+  state.storyboard = storyboard;
   saveState({ quiet: true });
 }
 

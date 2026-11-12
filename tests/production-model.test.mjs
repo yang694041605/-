@@ -8,6 +8,7 @@ import {
   formatTimecode,
   parseRouteHash,
   routeHash,
+  shotReferenceWindow,
   shotReviewComplete
 } from "../src/production-model.mjs";
 
@@ -66,6 +67,24 @@ test("故事分镜会映射到对应模板时间区间", () => {
   assert.equal(bound[2].source.referenceEnd, 8);
   assert.ok(bound.every((shot) => shot.source.templateId === "template-1"));
   assert.ok(bound.every((shot) => shot.review.identity === "pending"));
+});
+
+test("第 9 步按当前镜头自己的模板区间切取参考视频", () => {
+  assert.deepEqual(
+    shotReferenceWindow({
+      duration: 12,
+      source: { referenceStart: 34.2, referenceEnd: 46.2 }
+    }),
+    { start: 34.2, duration: 8 }
+  );
+  assert.deepEqual(
+    shotReferenceWindow({
+      duration: 2,
+      source: { referenceStart: 6, referenceEnd: 8 }
+    }),
+    { start: 6, duration: 2 }
+  );
+  assert.throws(() => shotReferenceWindow({ source: {} }), /绑定/);
 });
 
 test("时间轴只接受 24 FPS 帧边界内的时间", () => {

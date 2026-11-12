@@ -144,9 +144,11 @@ export function normalizeProject(input = {}) {
     tone: input.tone || "东方浪漫",
     aspect: input.aspect || "16:9",
     photos: input.photos || {},
+    photoAssetIds: input.photoAssetIds || {},
     photoSources: input.photoSources || {},
     selectedLooks: input.selectedLooks || {},
     workflow: input.workflow || { currentStep: 1, approvals: {} },
+    timelineRevision: Number(input.timelineRevision) || 1,
     vvvStyle: input.vvvStyle || "",
     story:
       String(input.story || "").trim() ||

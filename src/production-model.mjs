@@ -212,6 +212,22 @@ export function bindStoryboardToTemplate(storyboard, template) {
   });
 }
 
+export function shotReferenceWindow(shot, maxDuration = 8) {
+  const referenceStart = Number(shot?.source?.referenceStart);
+  if (!Number.isFinite(referenceStart) || referenceStart < 0) {
+    throw new Error("当前镜头尚未绑定模板起始时间");
+  }
+  const referenceEnd = Number(shot?.source?.referenceEnd);
+  const boundDuration =
+    Number.isFinite(referenceEnd) && referenceEnd > referenceStart
+      ? referenceEnd - referenceStart
+      : Number(shot?.duration) || 4;
+  return {
+    start: referenceStart,
+    duration: Math.max(0.5, Math.min(maxDuration, boundDuration))
+  };
+}
+
 function normalizeTrack(items, kind, fps) {
   return (Array.isArray(items) ? items : []).map((item, index) => {
     const startFrame = secondsToFrames(item.start ?? 0, fps);
