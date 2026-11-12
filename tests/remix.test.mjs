@@ -71,6 +71,13 @@ test("长参考片会合并成最多八个连续生产镜头", () => {
   assert.equal(shots[0].source.referenceStart, 25);
   assert.equal(shots.at(-1).source.referenceEnd, 65);
   assert.ok(shots.every((shot) => shot.duration <= 9));
+  assert.equal(shots.reduce((sum, shot) => sum + shot.duration, 0), 40);
+  for (let index = 1; index < shots.length; index += 1) {
+    assert.equal(
+      shots[index].source.referenceStart,
+      shots[index - 1].source.referenceEnd
+    );
+  }
 });
 
 test("原字幕按所选参考片区间重新打轴", () => {

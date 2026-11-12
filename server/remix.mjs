@@ -175,10 +175,13 @@ export function buildRemixShotPlan(template, project = {}, maxShots = 8) {
   );
   return Array.from({ length: shotCount }, (_, index) => {
     const startIndex = Math.floor((index * sourceShots.length) / shotCount);
-    const endIndex = Math.max(
-      startIndex,
-      Math.ceil(((index + 1) * sourceShots.length) / shotCount) - 1
+    const nextStartIndex = Math.floor(
+      ((index + 1) * sourceShots.length) / shotCount
     );
+    const endIndex =
+      index === shotCount - 1
+        ? sourceShots.length - 1
+        : Math.max(startIndex, nextStartIndex - 1);
     const first = sourceShots[startIndex];
     const last = sourceShots[endIndex];
     const start = index === 0 ? range.start : Number(first.start || range.start);

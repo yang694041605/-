@@ -72,6 +72,7 @@ import {
 
 seedDefaults();
 migrateProjectRecords();
+normalizeModelDefaults();
 migrateInterruptedJobs();
 await migrateAssetHashes();
 
@@ -1386,6 +1387,29 @@ function migrateInterruptedJobs() {
         status: "unknown",
         error: "本地服务在任务完成前重启；请核对原任务后明确重新发起"
       });
+    }
+  }
+}
+
+function normalizeModelDefaults() {
+  const models = listEntities("model", 1000);
+  const categories = [...new Set(models.map((model) => model.category))];
+  for (const category of categories) {
+    const candidates = models.filter((model) => model.category === category);
+    const currentDefault = candidates.find((model) => model.isDefault);
+    const preferred =
+      (currentDefault?.enabled &&
+        currentDefault.status === "ready" &&
+        currentDefault) ||
+      candidates.find((model) => model.enabled && model.status === "ready") ||
+      candidates.find((model) => model.enabled) ||
+      candidates[0];
+    if (!preferred) continue;
+    for (const candidate of candidates) {
+      const shouldBeDefault = candidate.id === preferred.id;
+      if (Boolean(candidate.isDefault) !== shouldBeDefault) {
+        updateEntity("model", candidate.id, { isDefault: shouldBeDefault });
+      }
     }
   }
 }

@@ -92,6 +92,24 @@ test("可信本机页面获得精确 Origin 的 CORS", async () => {
   }
 });
 
+test("每个模型类别只有一个默认项", async () => {
+  const { child, base, temp } = await startTestServer();
+  try {
+    const payload = await (await fetch(`${base}/api/models`)).json();
+    const groups = new Map();
+    for (const model of payload.items) {
+      const current = groups.get(model.category) || [];
+      current.push(model);
+      groups.set(model.category, current);
+    }
+    for (const models of groups.values()) {
+      assert.equal(models.filter((model) => model.isDefault).length, 1);
+    }
+  } finally {
+    await stopTestServer(child, temp);
+  }
+});
+
 test("渲染与生成接口拒绝浏览器提交文件路径", async () => {
   const { child, base, temp } = await startTestServer();
   try {

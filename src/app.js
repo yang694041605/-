@@ -1339,6 +1339,7 @@ function workflowReady(stepNumber) {
         (shot) =>
           shot.status === "approved" &&
           shotReviewComplete(shot.review) &&
+          Boolean(shot.assets?.firstFrame?.assetId) &&
           Boolean(shot.assets?.video?.assetId)
       )
     );
