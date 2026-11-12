@@ -8,9 +8,11 @@ import {
   approveStep,
   assertInside,
   buildProjectTimeline,
+  remixWorkflowReady,
   sha256File,
   sha256Text,
   stableStringify,
+  storyWorkflowReady,
   validateRenderTimeline
 } from "../server/production.mjs";
 import { shotReviewComplete } from "../src/production-model.mjs";
@@ -153,4 +155,23 @@ test("成片时间线拒绝素材哈希变化", () => {
 test("质检八项全部通过才符合镜头交付条件", () => {
   assert.equal(shotReviewComplete(approvedReview()), true);
   assert.equal(shotReviewComplete({ ...approvedReview(), crossFace: "failed" }), false);
+});
+
+test("服务端放行故事第九步必须要求全部镜头完成首帧、视频和人工审核", () => {
+  const project = fixtureProject();
+  assert.equal(storyWorkflowReady(project, fixtureAssets(), 9), true);
+  project.storyboard[0].review.hands = "pending";
+  assert.equal(storyWorkflowReady(project, fixtureAssets(), 9), false);
+});
+
+test("服务端放行抖音第三步必须要求最多八个镜头全部审核通过", () => {
+  const project = fixtureProject();
+  project.remixWorkflow = { currentStep: 3, approvals: {} };
+  const template = {
+    remixExtraction: { totalFrames: 960 },
+    remixAnalysis: { shots: [] }
+  };
+  assert.equal(remixWorkflowReady(project, template, fixtureAssets(), 3), true);
+  project.storyboard[1].assets.video = null;
+  assert.equal(remixWorkflowReady(project, template, fixtureAssets(), 3), false);
 });

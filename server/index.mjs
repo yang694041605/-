@@ -50,9 +50,11 @@ import {
   approveStep,
   assertInside,
   buildProjectTimeline,
+  remixWorkflowReady,
   rejectFilesystemPathKeys,
   sha256File,
   sha256Text,
+  storyWorkflowReady,
   validateRenderTimeline
 } from "./production.mjs";
 import {
@@ -401,6 +403,17 @@ async function handleApi(request, response, url) {
           error: `第 ${previousStep} 步确认已失效，请按顺序重新确认`
         });
       }
+    }
+    const template = getEntity("template", project.templateId);
+    const ready =
+      mode === "remix"
+        ? remixWorkflowReady(projectView, template, assets, step)
+        : storyWorkflowReady(projectView, assets, step, workflowBase);
+    if (!ready) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: `第 ${step} 步材料或人工审核尚未达到放行条件`
+      });
     }
     const workflow = approveStep({ ...project, workflow: workflowBase }, {
       mode,

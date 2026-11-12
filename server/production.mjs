@@ -275,6 +275,78 @@ export function validateRenderTimeline(project, timeline, assets) {
   };
 }
 
+export function storyWorkflowReady(project, assets, step, workflow = project.workflow) {
+  const shots = Array.isArray(project.storyboard) ? project.storyboard : [];
+  const hasKind = (kind) => assets.some((asset) => asset.kind === kind);
+  if (step === 1) {
+    return Boolean(
+      String(project.groom || "").trim() &&
+        String(project.bride || "").trim() &&
+        String(project.story || "").trim().length >= 20
+    );
+  }
+  if (step === 2) return Array.isArray(project.treatment?.acts) && project.treatment.acts.length === 5;
+  if (step === 3) return Boolean(workflow?.approvals?.[2]);
+  if (step === 4 || step === 5) return hasKind("voice");
+  if (step === 6) return shots.length > 0;
+  if (step === 7) return assets.some((asset) => asset.kind === "image" || asset.kind === "look-image");
+  if (step === 8) {
+    return assets.filter((asset) => asset.kind === "image" || asset.kind === "look-image").length >= 3;
+  }
+  if (step === 9) {
+    return (
+      shots.length > 0 &&
+      shots.every(
+        (shot) =>
+          shot.status === "approved" &&
+          shotReviewComplete(shot.review) &&
+          shot.assets?.firstFrame?.assetId &&
+          shot.assets?.video?.assetId
+      )
+    );
+  }
+  if (step === 10) return hasKind("music");
+  if (step === 11 || step === 12) return hasKind("voice") && hasKind("music");
+  if (step === 13) {
+    const approvedAt = workflow?.approvals?.[12]?.approvedAt || "";
+    return assets.some(
+      (asset) =>
+        asset.kind === "export" &&
+        (!approvedAt || String(asset.createdAt || "") >= approvedAt)
+    );
+  }
+  if (step === 14) return Boolean(workflow?.approvals?.[13]);
+  return false;
+}
+
+export function remixWorkflowReady(project, template, assets, step) {
+  if (step === 1) return Number(template?.remixExtraction?.totalFrames || 0) > 0;
+  if (step === 2) return Boolean(template?.remixAnalysis);
+  if (step === 3) {
+    const shots = Array.isArray(project.storyboard) ? project.storyboard : [];
+    return (
+      shots.length > 0 &&
+      shots.length <= 8 &&
+      shots.every(
+        (shot) =>
+          shot.status === "approved" &&
+          shotReviewComplete(shot.review) &&
+          shot.assets?.video?.assetId
+      )
+    );
+  }
+  if (step === 4) {
+    const approvedAt =
+      project.remixWorkflow?.approvals?.[3]?.approvedAt || "";
+    return assets.some(
+      (asset) =>
+        asset.kind === "export" &&
+        (!approvedAt || String(asset.createdAt || "") >= approvedAt)
+    );
+  }
+  return false;
+}
+
 export function rejectFilesystemPathKeys(value, pathPrefix = "") {
   const forbidden = new Set([
     "path",
