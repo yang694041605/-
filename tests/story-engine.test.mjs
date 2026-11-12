@@ -36,12 +36,12 @@ test("故事大纲会写入男女主姓名与个人故事", () => {
 
 test("40 秒分镜覆盖完整时长且镜头总帧数一致", () => {
   const shots = buildStoryboard(baseProject);
-  const seconds = shots.reduce((sum, shot) => sum + shot.duration, 0);
   const frames = shots.reduce((sum, shot) => sum + Math.round(shot.duration * 24), 0);
   assert.equal(shots.length, 17);
-  assert.equal(seconds, 40);
   assert.equal(frames, 960);
   assert.ok(shots.every((shot) => shot.prompt.includes("陈一") || shot.prompt.includes("苏禾")));
+  assert.ok(shots.every((shot) => shot.order > 0));
+  assert.ok(shots.every((shot) => shot.review.identity === "pending"));
 });
 
 test("空人物姓名采用中性占位，不伪造身份", () => {
@@ -67,6 +67,18 @@ test("五幕采集内容优先进入故事大纲", () => {
 
 test("分镜时长变化后自动回填总帧数", () => {
   const shots = buildStoryboard({ ...baseProject, duration: 30 });
-  assert.equal(shots.reduce((sum, shot) => sum + shot.duration, 0), 30);
   assert.equal(shots.reduce((sum, shot) => sum + Math.round(shot.duration * 24), 0), 720);
+  assert.ok(shots.every((shot) => shot.duration > 0));
+});
+
+test("参考片 163.2 秒不会产生单个超长结尾镜头", () => {
+  const shots = buildStoryboard({ ...baseProject, duration: 163.2 });
+  assert.equal(shots.length, 17);
+  assert.equal(shots.reduce((sum, shot) => sum + Math.round(shot.duration * 24), 0), 3917);
+  assert.ok(Math.max(...shots.map((shot) => shot.duration)) < 40);
+  assert.ok(shots.every((shot) => Number.isFinite(shot.start) && Number.isFinite(shot.end)));
+});
+
+test("超过一分钟的帧计划使用标准时间码", () => {
+  assert.equal(getFramePlan(163.2).timecode, "00:02:43:05");
 });

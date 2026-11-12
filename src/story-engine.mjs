@@ -127,15 +127,19 @@ const SHOT_TEMPLATES = [
   }
 ];
 
+const SHOT_WEIGHTS = [2, 2.5, 1.5, 2, 1.5, 1.5, 1.5, 1.5, 1.5, 2.5, 2, 2, 2, 3, 8.5, 1.5, 3];
+
 export function normalizeProject(input = {}) {
   const duration = Number(input.duration) || 40;
   return {
+    mode: input.mode === "remix" ? "remix" : "story",
     projectName: input.projectName || "我们的婚礼微电影",
     groom: String(input.groom || "").trim() || "男主角",
     bride: String(input.bride || "").trim() || "女主角",
     date: input.date || "",
     city: input.city || "杭州",
     duration,
+    referenceDuration: Number(input.referenceDuration) || 0,
     theme: THEME_SIGNATURES[input.theme] ? input.theme : "三生三世",
     tone: input.tone || "东方浪漫",
     aspect: input.aspect || "16:9",
@@ -153,12 +157,12 @@ export function normalizeProject(input = {}) {
 
 export function getFramePlan(duration = 40) {
   const safeDuration = Math.max(1, Number(duration) || 40);
-  const totalFrames = Math.round(safeDuration * 24);
+  const totalFrames = secondsToFrames(safeDuration, 24);
   return {
     fps: 24,
-    duration: safeDuration,
+    duration: framesToSeconds(totalFrames, 24),
     totalFrames,
-    timecode: `00:00:${String(Math.floor(safeDuration)).padStart(2, "0")}:00`
+    timecode: formatTimecode(totalFrames, 24)
   };
 }
 
@@ -201,32 +205,66 @@ export function buildStoryTreatment(input) {
 export function buildStoryboard(input) {
   const project = normalizeProject(input);
   const treatment = buildStoryTreatment(project);
-  const transitions = [2, 4.5, 6, 8, 9.5, 11, 12.5, 14, 15.5, 18, 20, 22, 24, 27, 35.5, 37, 40];
-  const usable = transitions.filter((value) => value < project.duration);
-  const boundaries = [0, ...usable, project.duration].filter(
-    (value, index, list) => list.indexOf(value) === index
-  );
+  const totalFrames = secondsToFrames(project.duration, 24);
+  const frameCounts = allocateFrameDurations(totalFrames, SHOT_WEIGHTS);
+  let frameCursor = 0;
 
-  return boundaries.slice(0, -1).map((start, index) => {
-    const end = boundaries[index + 1];
+  return frameCounts.map((frames, index) => {
+    const startFrame = frameCursor;
+    const endFrame = startFrame + frames;
+    frameCursor = endFrame;
+    const start = framesToSeconds(startFrame, 24);
+    const end = framesToSeconds(endFrame, 24);
     const template = SHOT_TEMPLATES[index % SHOT_TEMPLATES.length];
     const act =
       treatment.acts[
-        Math.min(4, Math.floor((index / Math.max(1, boundaries.length - 1)) * 5))
+        Math.min(4, Math.floor((index / Math.max(1, frameCounts.length - 1)) * 5))
       ];
+    const prompt = `${template.prompt}。人物：${project.groom}（男主角）与${project.bride}（女主角）。造型始终参考上传定妆照，统一保持五官、发型和服装连续性。场景氛围：${project.theme} / ${project.tone}。`;
     return {
       id: `shot-${String(index + 1).padStart(2, "0")}`,
       number: index + 1,
+      order: index + 1,
       start,
       end,
-      duration: Number((end - start).toFixed(1)),
+      duration: framesToSeconds(frames, 24),
+      frames,
+      startFrame,
+      endFrame,
+      timecode: `${formatTimecode(startFrame, 24)} - ${formatTimecode(endFrame, 24)}`,
       title: index === 0 ? "开场 · " + template.title : template.title,
       scene: template.scene,
       shot: template.shot,
       move: template.move,
       act: act.label,
-      status: index < 2 ? "已确认" : "待生成",
-      prompt: `${template.prompt}。人物：${project.groom}（男主角）与${project.bride}（女主角）。造型始终参考上传定妆照，统一保持五官、发型和服装连续性。场景氛围：${project.theme} / ${project.tone}。`
+      source: {
+        mode: "story",
+        templateId: "",
+        templateShotId: "",
+        referenceStart: null,
+        referenceEnd: null
+      },
+      prompt,
+      promptVersion: {
+        version: 1,
+        hash: "",
+        text: prompt
+      },
+      assets: {
+        firstFrame: null,
+        video: null,
+        finalClip: null
+      },
+      review: createReviewState(),
+      status: "draft"
     };
   });
 }
+import {
+  allocateFrameDurations,
+  createReviewState,
+  formatTimecode,
+  framesToSeconds,
+  secondsToFrames
+} from "./production-model.mjs";
+
