@@ -887,8 +887,8 @@ async function handleApi(request, response, url) {
       status: result.ok
         ? ["subscription_expired", "external_service_blocked"].includes(model.status)
           ? model.status
-          : "ready"
-        : "error",
+          : result.status || "ready"
+        : result.status || "error",
       lastTest: {
         ok: result.ok,
         message: result.message,
@@ -2231,13 +2231,26 @@ function getModelOrDefault(modelId, category) {
 async function testModel(model) {
   try {
     if (model.provider === "volcengine-ark") {
-      const resources = await arkResources(model.profile, model.category);
+      const auth = await arkAuthStatus();
+      const profile = (auth.profiles_summary || []).find(
+        (item) => item.name === model.profile
+      );
+      if (profile?.expires_at && Date.parse(profile.expires_at) < Date.now()) {
+        return {
+          ok: false,
+          status: "subscription_expired",
+          message: `Profile ${model.profile} 已于 ${profile.expires_at} 到期；资源可见不等于可调用`
+        };
+      }
+      const modality = model.category === "vision" ? "text" : model.category;
+      const resources = await arkResources(model.profile, modality);
       const ids = (resources.items || []).map((item) => item.id);
       const callable = ids.includes(model.model);
       return {
         ok: callable,
+        status: callable ? "visible_unverified" : "resource_not_found",
         message: callable
-          ? `连接正常，当前模型 ${model.model} 可见`
+          ? `当前模型 ${model.model} 可见；测试连接不代表已完成一次付费生成`
           : `当前 Profile 未发现可调用的 ${model.model}；资源数 ${ids.length}`,
         resources: ids
       };
