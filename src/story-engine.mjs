@@ -158,8 +158,7 @@ export function normalizeProject(input = {}) {
     story:
       String(input.story || "").trim() ||
       "从第一次相遇到今天，我们把平凡的日常，过成了彼此最重要的故事。",
-    storyBeats: input.storyBeats || {}
-    ,
+    storyBeats: input.storyBeats || {},
     storyStoryboard: input.storyStoryboard || [],
     remixStoryboard: input.remixStoryboard || []
   };

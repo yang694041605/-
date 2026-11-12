@@ -72,6 +72,7 @@ import {
 
 seedDefaults();
 migrateProjectRecords();
+migrateInterruptedJobs();
 await migrateAssetHashes();
 
 const port = Number(process.env.PORT || 4173);
@@ -1274,6 +1275,26 @@ function migrateProjectRecords() {
     });
     const shotFrames = normalizedShots.reduce((sum, shot) => sum + shot.frames, 0);
     const projectFrames = Math.round(Number(project.duration || 0) * 24);
+    const legacyStoryApprovals = Object.values(project.workflow?.approvals || {}).some(
+      (approval) => !approval?.fingerprint
+    );
+    const legacyRemixApprovals = Object.values(
+      project.remixWorkflow?.approvals || {}
+    ).some((approval) => !approval?.fingerprint);
+    const workflow = legacyStoryApprovals
+      ? {
+          currentStep: 1,
+          approvals: {},
+          legacyApprovals: project.workflow?.approvals || {}
+        }
+      : project.workflow || { currentStep: 1, approvals: {} };
+    const remixWorkflow = legacyRemixApprovals
+      ? {
+          currentStep: 1,
+          approvals: {},
+          legacyApprovals: project.remixWorkflow?.approvals || {}
+        }
+      : project.remixWorkflow || { currentStep: 1, approvals: {} };
     const shouldRepairDuration =
       shotFrames > 0 && Math.abs(shotFrames - projectFrames) > 1;
     const assets = projectAssets(project.id);
@@ -1305,6 +1326,8 @@ function migrateProjectRecords() {
       !project.mode ||
       !project.timelineRevision ||
       !project.photoAssetIds ||
+      legacyStoryApprovals ||
+      legacyRemixApprovals ||
       Boolean(project.photos?.groom && !project.photoAssetIds?.groom) ||
       Boolean(project.photos?.bride && !project.photoAssetIds?.bride) ||
       !project.storyDuration ||
@@ -1322,6 +1345,8 @@ function migrateProjectRecords() {
           Number(project.referenceDuration || 0) ||
           (project.templateId && shouldRepairDuration ? Number(project.duration || 0) : 0),
         storyboard: normalizedShots,
+        workflow,
+        remixWorkflow,
         storyStoryboard:
           project.storyStoryboard ||
           (project.mode !== "remix" ? normalizedShots : []),
@@ -1347,6 +1372,20 @@ async function migrateAssetHashes() {
     const contentHash = await sha256File(asset.localPath).catch(() => "");
     if (contentHash) {
       updateEntity("asset", asset.id, { contentHash, version: asset.version || 1 });
+    }
+  }
+}
+
+function migrateInterruptedJobs() {
+  for (const job of listEntities("job", 5000)) {
+    if (
+      ["queued", "running"].includes(job.status) &&
+      (job.kind !== "video-generation" || !job.providerTaskId)
+    ) {
+      updateJob(job.id, {
+        status: "unknown",
+        error: "本地服务在任务完成前重启；请核对原任务后明确重新发起"
+      });
     }
   }
 }
@@ -1559,7 +1598,7 @@ async function analyzeRemixTemplate(templateId, jobId) {
       model: vision?.model || "",
       subSkill: "asr-align",
       inputPath: template.remixExtraction.audioPath,
-      parameters: { maxOutputTokens: 8000, temperature: 0.1, timeout: "10m" }
+      parameters: { maxOutputTokens: 8000, temperature: 0.1, timeout: "2m" }
     });
     transcriptSrt = String(result.content || "");
     transcript = transcriptSrt

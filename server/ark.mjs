@@ -156,7 +156,7 @@ export async function understandMedia({
     "--temperature",
     String(parameters.temperature ?? 0.2),
     "--timeout",
-    String(parameters.timeout || "10m")
+    String(parameters.timeout || "2m")
   );
   if (model) args.push("--model", model);
   if (parameters.reasoningEffort) {
