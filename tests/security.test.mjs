@@ -109,6 +109,22 @@ test("渲染与生成接口拒绝浏览器提交文件路径", async () => {
     assert.equal(response.status, 400);
     const payload = await response.json();
     assert.match(payload.error, /路径/);
+
+    const generation = await fetch(`${base}/api/generate/video`, {
+      method: "POST",
+      headers: {
+        Origin: base,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        projectId: "project-default",
+        prompt: "测试",
+        inputs: ["reference_image:C:\\Windows\\win.ini"]
+      })
+    });
+    assert.equal(generation.status, 400);
+    const generationPayload = await generation.json();
+    assert.match(generationPayload.error, /资产 ID/);
   } finally {
     await stopTestServer(child, temp);
   }
