@@ -30,6 +30,7 @@ import {
   inferExtension,
   probeMedia,
   renderTimeline,
+  runAdvancedMediaCheck,
   sceneCutsToShots,
   verifyMedia
 } from "./media.mjs";
@@ -39,6 +40,7 @@ import {
   generatePollinationsImage,
   generatePollinationsText
 } from "./pollinations.mjs";
+import { checkVvv, createVvvProject, findVvvRoot } from "./vvv.mjs";
 
 seedDefaults();
 
@@ -482,6 +484,67 @@ async function handleApi(request, response, url) {
     });
     queueJob(job.id, () => renderJob(job.id));
     return sendJson(response, 202, { ok: true, job });
+  }
+
+  if (path === "/api/vvv/project" && method === "POST") {
+    const body = await readJson(request);
+    const root = await findVvvRoot();
+    if (!root) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "未找到 VVV 模板环境，请设置 VVV_ROOT"
+      });
+    }
+    const photos = (body.assetIds || [])
+      .map((assetId) => getEntity("asset", assetId))
+      .filter(
+        (asset) =>
+          asset?.localPath && /\.(jpg|jpeg|png|webp)$/i.test(asset.localPath)
+      )
+      .map((asset) => asset.localPath);
+    if (photos.length === 0) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "创建 VVV 工程至少需要一张婚礼照片"
+      });
+    }
+    const outputRoot = resolve(mediaRoot, "vvv-projects", id("vvv"));
+    const project = getEntity("project", body.projectId);
+    const created = await createVvvProject({
+      root,
+      template: body.template || "starter",
+      format: body.format || "16:9",
+      photos,
+      outputDir: outputRoot,
+      allowRepeat: Boolean(body.allowRepeat),
+      projectInfo: {
+        name: project?.name || "我们的婚礼",
+        groom: project?.groom || "新郎",
+        bride: project?.bride || "新娘",
+        weddingDate: project?.weddingDate || ""
+      }
+    });
+    const asset = saveEntity("asset", {
+      id: id("asset"),
+      kind: "remotion-project",
+      projectId: body.projectId || "",
+      title: `VVV ${body.template || "starter"} 可编辑工程`,
+      localPath: created.projectDir,
+      previewPath: resolve(created.projectDir, "creative", "contact-sheet.jpg"),
+      previewUrl: mediaUrlForPath(
+        resolve(created.projectDir, "creative", "contact-sheet.jpg")
+      ),
+      template: body.template || "starter",
+      format: body.format || "16:9"
+    });
+    return sendJson(response, 201, { ok: true, item: { ...created, asset } });
+  }
+
+  if (path === "/api/vvv/doctor" && method === "GET") {
+    const root = await findVvvRoot();
+    if (!root) return sendJson(response, 409, { ok: false, error: "未找到 VVV" });
+    const result = await checkVvv(root);
+    return sendJson(response, 200, { ok: true, item: result, root });
   }
 
   if (path === "/api/jobs" && method === "GET") {
@@ -960,7 +1023,42 @@ async function renderJob(jobId) {
     subtitlePath: job.input.subtitlePath || ""
   });
   const verified = await verifyMedia(outputPath);
+  const advancedCheck = await runAdvancedMediaCheck(outputPath, "youtube").catch((error) => ({
+    status: "failed",
+    ok: false,
+    error: safeError(error)
+  }));
   const outputUrl = mediaUrlForPath(outputPath);
+  const editProjectPath = join(outputDir, "edit-project.json");
+  await writeFile(
+    editProjectPath,
+    JSON.stringify(
+      {
+        schema: "xying-edit-project/v1",
+        projectId: job.projectId,
+        title: job.input.title || "婚礼微电影",
+        fps: job.input.fps || 24,
+        resolution: {
+          width: job.input.width || 1280,
+          height: job.input.height || 720
+        },
+        clips: job.input.clips || [],
+        audio: {
+          voicePath: job.input.voicePath || "",
+          musicPath,
+          autoMusic: job.input.autoMusic !== false
+        },
+        subtitlePath: job.input.subtitlePath || "",
+        outputPath,
+        verifiedMedia: verified,
+        advancedCheck,
+        createdAt: new Date().toISOString()
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
   const exportEntity = saveEntity("export", {
     id: id("export"),
     projectId: job.projectId,
@@ -980,10 +1078,28 @@ async function renderJob(jobId) {
     media: verified,
     jobId: job.id
   });
+  const editProjectAsset = saveEntity("asset", {
+    id: id("asset"),
+    kind: "edit-project",
+    projectId: job.projectId,
+    title: `${job.input.title || "婚礼微电影"} · 可编辑工程`,
+    localPath: editProjectPath,
+    url: mediaUrlForPath(editProjectPath),
+    mimeType: "application/json",
+    jobId: job.id
+  });
   updateJob(jobId, {
     status: "succeeded",
     progress: 100,
-    result: { outputPath, url: outputUrl, media: verified, export: exportEntity, asset }
+    result: {
+      outputPath,
+      url: outputUrl,
+      media: verified,
+      export: exportEntity,
+      asset,
+      editProject: editProjectAsset,
+      advancedCheck
+    }
   });
 }
 
@@ -1085,6 +1201,19 @@ async function testModel(model) {
     if (model.provider === "beatra") {
       return { ok: false, message: "Beatra 尚未初始化，需要安装并完成账号授权" };
     }
+    if (model.provider === "vvv-remotion") {
+      const root = await findVvvRoot();
+      if (!root) return { ok: false, message: "未找到 VVV 模板环境" };
+      const result = await checkVvv(root);
+      return {
+        ok: result.status === "passed",
+        message:
+          result.status === "passed"
+            ? "VVV / Remotion 模板环境可用；Node 版本差异会在渲染时提示"
+            : "VVV 检查未通过",
+        details: result
+      };
+    }
     return { ok: false, message: "未知模型供应商" };
   } catch (error) {
     return { ok: false, message: error.message };
@@ -1149,7 +1278,15 @@ function splitSubtitleLines(text, duration) {
     .split(/[。！？!?；;\n]+/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const sentences = raw.length ? raw : [text];
+  const base = raw.length ? raw : [text];
+  const sentences = base.flatMap((line) => {
+    if (line.length <= 18) return [line];
+    const chunks = [];
+    for (let cursor = 0; cursor < line.length; cursor += 18) {
+      chunks.push(line.slice(cursor, cursor + 18));
+    }
+    return chunks;
+  });
   const weights = sentences.map((line) => Math.max(4, line.length));
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   let cursor = 0;

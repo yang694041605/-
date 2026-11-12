@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { runProcess } from "./ark.mjs";
@@ -209,7 +209,7 @@ export async function renderTimeline({
       });
       const mixInputs = audioInputs.map((_, index) => `[a${index}]`).join("");
       filters.push(
-        `${mixInputs}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=2[aout]`
+        `${mixInputs}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=2,loudnorm=I=-14:TP=-1:LRA=11[aout]`
       );
       args.push(
         "-filter_complex",
@@ -232,6 +232,14 @@ export async function renderTimeline({
         args.splice(currentMapIndex, 2);
       }
       args.push("-vf", videoFilter, "-map", "0:v:0");
+      args.push(
+        "-map",
+        "1:s:0",
+        "-c:s",
+        "mov_text",
+        "-metadata:s:s:0",
+        "language=chi"
+      );
     }
     args.push(
       "-c:v",
@@ -242,10 +250,18 @@ export async function renderTimeline({
       "20",
       "-pix_fmt",
       "yuv420p",
+      "-colorspace",
+      "bt709",
+      "-color_primaries",
+      "bt709",
+      "-color_trc",
+      "bt709",
       "-c:a",
       "aac",
       "-b:a",
       "192k",
+      "-ar",
+      "48000",
       "-movflags",
       "+faststart",
       outputPath
@@ -267,6 +283,52 @@ export async function verifyMedia(filePath) {
   if (!media.video) throw new Error("输出文件没有视频轨道");
   if (media.duration <= 0) throw new Error("输出文件时长无效");
   return media;
+}
+
+export async function runAdvancedMediaCheck(filePath, platform = "youtube") {
+  const candidates = [
+    process.env.FFMPEG_SKILL_ROOT,
+    "C:\\Users\\dell\\.codex\\skills\\ffmpeg-skill",
+    resolve(process.cwd(), "..", "vendor-research", "ffmpeg-skill")
+  ].filter(Boolean);
+  let skillRoot = "";
+  for (const candidate of candidates) {
+    try {
+      await access(resolve(candidate, "scripts", "check.py"));
+      skillRoot = candidate;
+      break;
+    } catch {
+      // Continue searching.
+    }
+  }
+  if (!skillRoot) {
+    return {
+      status: "unavailable",
+      ok: null,
+      warnings: ["ffmpeg-skill 未安装或路径不可用"]
+    };
+  }
+  const script = resolve(skillRoot, "scripts", "check.py");
+  try {
+    const result = await runProcess(
+      process.env.PYTHON_PATH || "python",
+      [script, filePath, "--platform", platform, "--json"],
+      { cwd: skillRoot }
+    );
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    if (error.stdout) {
+      try {
+        return {
+          ...JSON.parse(error.stdout),
+          stderr: error.stderr || ""
+        };
+      } catch {
+        // Fall through to the original failure.
+      }
+    }
+    throw error;
+  }
 }
 
 export function inferExtension(contentType = "", filename = "") {

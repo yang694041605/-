@@ -1304,6 +1304,101 @@ button.chip.active {
   gap: 14px;
 }
 
+.wizard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  gap: 18px;
+}
+
+.wizard-steps {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.wizard-step {
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.42);
+  text-align: left;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.wizard-step:hover {
+  border-color: rgba(169, 23, 28, 0.25);
+  transform: translateY(-2px);
+}
+
+.wizard-step.current {
+  border-color: rgba(169, 23, 28, 0.35);
+  background: rgba(169, 23, 28, 0.07);
+}
+
+.wizard-step.done {
+  background: rgba(79, 125, 88, 0.07);
+}
+
+.wizard-step-no {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--red);
+  background: var(--red-wash);
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wizard-step.done .wizard-step-no {
+  color: #fff;
+  background: #5e8063;
+}
+
+.wizard-step-copy {
+  min-width: 0;
+}
+
+.wizard-step-copy strong {
+  display: block;
+  font-size: 12.5px;
+}
+
+.wizard-step-copy small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wizard-step .badge {
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1160px) {
+  .wizard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .wizard-steps {
+    grid-template-columns: 1fr;
+  }
+}
+
 .feature-card {
   position: relative;
   min-height: 148px;
@@ -1449,6 +1544,26 @@ button.chip.active {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.4);
+}
+
+.story-beat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px;
+}
+
+.story-beat-grid .field:last-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 680px) {
+  .story-beat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .story-beat-grid .field:last-child {
+    grid-column: auto;
+  }
 }
 
 .story-length strong {

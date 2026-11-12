@@ -281,6 +281,18 @@ export function seedDefaults() {
         isDefault: true,
         status: "ready",
         parameters: { fps: 24, videoCodec: "libx264", audioCodec: "aac" }
+      },
+      {
+        id: "model-editor-vvv",
+        category: "editor",
+        provider: "vvv-remotion",
+        profile: "",
+        model: "remotion-4.0.534",
+        label: "VVV Remotion · 可编辑工程",
+        enabled: true,
+        isDefault: false,
+        status: "needs_node26",
+        parameters: { defaultTemplate: "starter", format: "16:9" }
       }
     ];
     models.forEach((model) => saveEntity("model", model, model.id));
@@ -326,6 +338,25 @@ export function seedDefaults() {
         parameters: { width: 1024, height: 1365 }
       },
       "model-image-pollinations"
+    );
+  }
+
+  if (!getEntity("model", "model-editor-vvv")) {
+    saveEntity(
+      "model",
+      {
+        id: "model-editor-vvv",
+        category: "editor",
+        provider: "vvv-remotion",
+        profile: "",
+        model: "remotion-4.0.534",
+        label: "VVV Remotion · 可编辑工程",
+        enabled: true,
+        isDefault: false,
+        status: "needs_node26",
+        parameters: { defaultTemplate: "starter", format: "16:9" }
+      },
+      "model-editor-vvv"
     );
   }
 
@@ -388,13 +419,23 @@ export function seedDefaults() {
       city: "杭州",
       story:
         "我们从大学图书馆的一次偶遇开始。那天外面下着雨，他借给她一把伞。后来一起旅行、一起搬家，也一起度过异地最难的那两年。今天，我们决定把余生写成同一个故事。",
+      storyBeats: {
+        origin: "大学图书馆偶遇，雨天借伞。",
+        knowing: "一起旅行、搬家，在异地最难的那两年互相陪伴。",
+        confirm: "",
+        companionship: "",
+        promise: "今天，我们决定把余生写成同一个故事。"
+      },
       templateId: "",
       duration: 40,
       fps: 24,
       aspect: "16:9",
       status: "draft",
       photos: { groom: "", bride: "" },
-      selectedLooks: { groom: "", bride: "" }
+      photoSources: { groom: "", bride: "" },
+      selectedLooks: { groom: "", bride: "" },
+      workflow: { currentStep: 1, approvals: {} },
+      vvvStyle: ""
     };
     saveEntity("project", project, project.id);
   }

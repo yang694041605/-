@@ -129,6 +129,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  createVvvProject: (payload) =>
+    request("/api/vvv/project", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   mediaUrl: (localPath) => {
     if (!localPath) return "";
     if (/^https?:\/\//.test(localPath) || localPath.startsWith("data:")) return localPath;

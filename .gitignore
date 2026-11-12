@@ -15,3 +15,4 @@ output/
 *.jpeg
 *.png
 !docs/**/*.png
+!public/vvv-templates/*.jpg

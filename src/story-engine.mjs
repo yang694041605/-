@@ -1,21 +1,35 @@
 const STORY_BEATS = [
   {
     key: "origin",
-    label: "第一幕 · 相逢",
+    label: "第一幕 · 相识",
     title: "第一眼，是后来所有故事的开头",
     match: ["认识", "初见", "遇见", "学校", "大学", "高中", "工作", "朋友"],
     visual: "从旧照片或相遇地点的空镜切入，人物由剪影逐渐清晰。"
   },
   {
-    key: "promise",
+    key: "knowing",
     label: "第二幕 · 相知",
     title: "日常很轻，爱意很重",
     match: ["一起", "旅行", "电影", "吃饭", "陪伴", "异地", "回家"],
     visual: "用牵手、回眸、灯下相视三个特写串联共同记忆。"
   },
   {
-    key: "today",
-    label: "第三幕 · 相守",
+    key: "confirm",
+    label: "第三幕 · 确认",
+    title: "从这一刻起，我们决定并肩",
+    match: ["求婚", "表白", "决定", "搬家", "毕业", "重逢", "在一起"],
+    visual: "用一次明确的选择或动作，交代关系从喜欢变成共同生活。"
+  },
+  {
+    key: "companionship",
+    label: "第四幕 · 相伴",
+    title: "日子很长，幸好身边的人是你",
+    match: ["生活", "工作", "养", "旅行", "照顾", "家", "一直"],
+    visual: "以生活细节和动作递进表现陪伴，避免只堆照片。"
+  },
+  {
+    key: "promise",
+    label: "第五幕 · 承诺",
     title: "今天，我们把余生写进同一封信",
     match: ["结婚", "求婚", "婚礼", "决定", "以后", "未来"],
     visual: "双人并肩走向婚门，红绸落下，画面落到姓名与婚期。"
@@ -128,9 +142,12 @@ export function normalizeProject(input = {}) {
     photos: input.photos || {},
     photoSources: input.photoSources || {},
     selectedLooks: input.selectedLooks || {},
+    workflow: input.workflow || { currentStep: 1, approvals: {} },
+    vvvStyle: input.vvvStyle || "",
     story:
       String(input.story || "").trim() ||
-      "从第一次相遇到今天，我们把平凡的日常，过成了彼此最重要的故事。"
+      "从第一次相遇到今天，我们把平凡的日常，过成了彼此最重要的故事。",
+    storyBeats: input.storyBeats || {}
   };
 }
 
@@ -161,10 +178,13 @@ export function buildStoryTreatment(input) {
       ...beat,
       era: signature.eras[index],
       summary:
+        String(project.storyBeats?.[beat.key] || "").trim() ||
         source ||
         [
           `${project.groom}与${project.bride}在命运安排下第一次相见。`,
           `${project.groom}与${project.bride}把陪伴写进了每一个普通日常。`,
+          `${project.groom}与${project.bride}决定认真走向彼此。`,
+          `${project.groom}与${project.bride}在漫长生活里成为彼此最熟悉的依靠。`,
           `${project.groom}与${project.bride}在亲友祝福中许下相守一生的承诺。`
         ][index]
     };
@@ -190,7 +210,10 @@ export function buildStoryboard(input) {
   return boundaries.slice(0, -1).map((start, index) => {
     const end = boundaries[index + 1];
     const template = SHOT_TEMPLATES[index % SHOT_TEMPLATES.length];
-    const act = treatment.acts[Math.min(2, Math.floor((index / boundaries.length) * 3))];
+    const act =
+      treatment.acts[
+        Math.min(4, Math.floor((index / Math.max(1, boundaries.length - 1)) * 5))
+      ];
     return {
       id: `shot-${String(index + 1).padStart(2, "0")}`,
       number: index + 1,

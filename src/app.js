@@ -20,6 +20,13 @@ const DEFAULT_PROJECT = {
   aspect: "16:9",
   story:
     "我们从大学图书馆的一次偶遇开始。那天外面下着雨，他借给她一把伞。后来一起旅行、一起搬家，也一起度过异地最难的那两年。今天，我们决定把余生写成同一个故事。",
+  storyBeats: {
+    origin: "大学图书馆偶遇，雨天借伞。",
+    knowing: "一起旅行、搬家，在异地最难的那两年互相陪伴。",
+    confirm: "",
+    companionship: "",
+    promise: "今天，我们决定把余生写成同一个故事。"
+  },
   photos: {
     groom: "",
     bride: ""
@@ -31,7 +38,12 @@ const DEFAULT_PROJECT = {
   selectedLooks: {
     groom: "",
     bride: ""
-  }
+  },
+  workflow: {
+    currentStep: 1,
+    approvals: {}
+  },
+  vvvStyle: ""
 };
 
 const NAV_TREE = [
@@ -41,6 +53,28 @@ const NAV_TREE = [
     symbol: "启",
     route: "overview",
     children: [
+      {
+        id: "material-entry",
+        label: "素材中心",
+        symbol: "材",
+        route: "assets",
+        children: [
+          { id: "material-couple", label: "新人照片与故事卡", route: "assets" },
+          { id: "material-reference", label: "服装与场景参考", route: "assets" },
+          { id: "material-video", label: "参考视频与成片", route: "assets" }
+        ]
+      },
+      {
+        id: "wizard-entry",
+        label: "14 步制作向导",
+        symbol: "引",
+        route: "wizard",
+        children: [
+          { id: "wizard-story", label: "01–05 故事与旁白", route: "wizard" },
+          { id: "wizard-visual", label: "06–09 分镜与视频", route: "wizard" },
+          { id: "wizard-delivery", label: "10–14 音乐与交付", route: "wizard" }
+        ]
+      },
       {
         id: "template-group",
         label: "风格模板库",
@@ -229,7 +263,7 @@ const NAV_TREE = [
         route: "assets",
         children: [
           { id: "template-assets", label: "模板与封面", route: "templates" },
-          { id: "asset-library", label: "人物与场景资产", route: "assets" },
+          { id: "asset-library", label: "全部项目素材", route: "assets" },
           { id: "job-center", label: "生成任务中心", route: "jobs" }
         ]
       }
@@ -249,6 +283,7 @@ const NAV_TREE = [
 
 const ROUTE_META = {
   overview: ["项目工作台", "把真实故事，拍成只属于你们的一部电影"],
+  wizard: ["14 步婚礼电影向导", "每一步都有明确素材、人工确认和下一步，不会一次盲渲染到底"],
   templates: ["风格模板库", "上传本地视频或解析抖音链接，把参考片变成可编辑的模板配方"],
   story: ["故事共创", "从一个真实细节出发，让剧情有来处、有情绪、有落点"],
   characters: ["人物设定", "锁定男女主的脸、气质与服装，保证每个镜头都是同一个人"],
@@ -262,7 +297,7 @@ const ROUTE_META = {
   edit: ["成片剪辑台", "把镜头放回时间线，让动作与音乐在正确的帧上相遇"],
   audio: ["字幕与配乐", "统一字幕节奏、字体层级与婚礼音乐情绪"],
   export: ["导出成片", "输出适用于婚礼现场、竖屏分享与亲友收藏的版本"],
-  assets: ["资产库", "统一管理人像、场景、分镜与生成结果"],
+  assets: ["素材中心", "集中管理新人照片、故事卡、服装场景参考、视频、配音、音乐、字幕和成片"],
   method: ["参考视频拆解", "把参考片的表层画面拆成可执行的生产步骤"],
   guide: ["操作指南", "从素材准备到成片交付，了解每个环节如何使用"],
   settings: ["项目设置", "管理输出规格、草稿与本地数据"]
@@ -367,6 +402,82 @@ const ANALYSIS_SEGMENTS = [
   }
 ];
 
+const WIZARD_STEPS = [
+  { number: 1, title: "故事采集", subtitle: "新人资料、五幕故事与补充照片", route: "story" },
+  { number: 2, title: "文案写作包", subtitle: "生成旁白初稿与事实对应", route: "story" },
+  { number: 3, title: "新人确认文案", subtitle: "新人明确确认当前版本", route: "story" },
+  { number: 4, title: "音色试听", subtitle: "生成并试听中文旁白", route: "audio" },
+  { number: 5, title: "完整旁白", subtitle: "确认读音、情绪、停顿和时长", route: "audio" },
+  { number: 6, title: "分镜设计", subtitle: "按旁白实际节奏确认镜头表", route: "storyboard" },
+  { number: 7, title: "三个重点静帧", subtitle: "先确认男女主关键造型与时代", route: "looks" },
+  { number: 8, title: "剩余分镜图片", subtitle: "补齐场景、服装和关键帧", route: "generate" },
+  { number: 9, title: "图生视频", subtitle: "逐镜生成、检查身份与动作", route: "generate" },
+  { number: 10, title: "BGM 风格试听", subtitle: "选择情绪、节奏和授权音乐", route: "audio" },
+  { number: 11, title: "配音与 BGM 试混", subtitle: "确认声音层级与情绪转折", route: "audio" },
+  { number: 12, title: "完整混音", subtitle: "全长检查旁白、音乐和留白", route: "audio" },
+  { number: 13, title: "字幕预览", subtitle: "完整观看带字幕样片", route: "export" },
+  { number: 14, title: "正式成片交付", subtitle: "导出 MP4、SRT、工程和检查记录", route: "export" }
+];
+
+const VVV_STYLE_PRESETS = [
+  {
+    id: "album",
+    title: "Album · 现代留白圆角画册",
+    format: "16:9 / 9:16",
+    description: "圆角画册式故事页，按情绪段落组织照片，适合完整爱情故事。",
+    image: "./public/vvv-templates/album.jpg"
+  },
+  {
+    id: "dv-story",
+    title: "DV Story · 我们的故事",
+    format: "16:9",
+    description: "DV 取景框、打字字幕和胶片条，适合校园与成长记忆。",
+    image: "./public/vvv-templates/dv-story.jpg"
+  },
+  {
+    id: "comedy",
+    title: "Comedy · 婚礼喜剧开场",
+    format: "16:9",
+    description: "轻松热场、反转和宾客互动，适合宴会开场。",
+    image: "./public/vvv-templates/comedy.jpg"
+  },
+  {
+    id: "doodle",
+    title: "Doodle · 手绘我们结婚啦",
+    format: "16:9",
+    description: "白纸手绘与照片穿插，轻松温柔。",
+    image: "./public/vvv-templates/doodle.jpg"
+  },
+  {
+    id: "starter",
+    title: "Starter · 节拍相册",
+    format: "16:9 / 9:16",
+    description: "短平快的婚礼照片卡点片，适合快速出片和竖屏传播。",
+    image: "./public/vvv-templates/starter.jpg"
+  },
+  {
+    id: "editorial",
+    title: "Editorial · 简约杂志",
+    format: "16:9",
+    description: "白色杂志版面、手写标题和诗句式文案。",
+    image: "./public/vvv-templates/editorial.jpg"
+  },
+  {
+    id: "cinema",
+    title: "Cinema · 黑幕影院开场",
+    format: "16:9",
+    description: "适合婚宴大屏的影院开场、日期线与成长照片。",
+    image: "./public/vvv-templates/cinema.jpg"
+  },
+  {
+    id: "memoir",
+    title: "Memoir · 手写胶片故事",
+    format: "16:9",
+    description: "手写、胶片、家书和人生章节，适合长篇婚礼开场。",
+    image: "./public/vvv-templates/memoir.jpg"
+  }
+];
+
 let state = loadState();
 let activeRoute = "overview";
 let activeFocus = null;
@@ -427,13 +538,16 @@ function saveState({ quiet = false } = {}) {
           weddingDate: state.date,
           city: state.city,
           story: state.story,
+          storyBeats: state.storyBeats,
           duration: state.duration,
           theme: state.theme,
           tone: state.tone,
           aspect: state.aspect,
           treatment,
           storyboard,
-          selectedLooks: state.selectedLooks
+          selectedLooks: state.selectedLooks,
+          workflow: state.workflow,
+          vvvStyle: state.vvvStyle
         })
         .catch(() => {});
     }
@@ -469,6 +583,7 @@ async function refreshRuntime({ rerender = true } = {}) {
         date: project.weddingDate || state.date,
         city: project.city || state.city,
         story: project.story || state.story,
+        storyBeats: project.storyBeats || state.storyBeats,
         duration: project.duration || state.duration,
         theme: project.theme || state.theme,
         tone: project.tone || state.tone,
@@ -478,7 +593,9 @@ async function refreshRuntime({ rerender = true } = {}) {
           bride: project.photos?.bride || state.photos.bride
         },
         photoSources: project.photoSources || state.photoSources,
-        selectedLooks: project.selectedLooks || state.selectedLooks
+        selectedLooks: project.selectedLooks || state.selectedLooks,
+        workflow: project.workflow || state.workflow,
+        vvvStyle: project.vvvStyle || state.vvvStyle
       });
       treatment = buildStoryTreatment(state);
       storyboard = buildStoryboard(state);
@@ -611,6 +728,7 @@ function renderNavNode(node, depth) {
 function getView(route) {
   const views = {
     overview: overviewPage,
+    wizard: wizardPage,
     templates: templatesPage,
     models: modelCenterPage,
     story: storyPage,
@@ -687,8 +805,8 @@ function overviewPage() {
           </h1>
           <p>输入姓名、人物照片与爱情故事，完成模板解析、叙事、定妆、分镜、图片视频生成、语音配乐和本地成片合成。</p>
           <div class="hero-actions">
-            <button class="button primary" data-route="story">${icon("sparkle")}开始共创</button>
-            <button class="button ghost" data-route="method">先看参考片拆解${icon("arrow")}</button>
+            <button class="button primary" data-route="wizard">${icon("sparkle")}开始 14 步制作</button>
+            <button class="button ghost" data-route="assets">打开素材中心${icon("arrow")}</button>
           </div>
           <div class="hero-stats">
             <div class="hero-stat"><strong>${plan.totalFrames}</strong><span>总画格 / 24 FPS</span></div>
@@ -754,7 +872,7 @@ function overviewPage() {
               <button class="text-button" data-route="guide">查看操作指南 →</button>
             </div>
             <div class="feature-grid">
-              <div class="feature-card"><div class="feature-icon">叙</div><h4>故事共创</h4><p>提炼真实细节，生成三幕结构与情绪曲线。</p></div>
+              <div class="feature-card"><div class="feature-icon">叙</div><h4>故事共创</h4><p>提炼真实细节，生成相识、相知、确认、相伴、承诺五幕。</p></div>
               <div class="feature-card"><div class="feature-icon">容</div><h4>人物锁定</h4><p>男女主照片、身份提示词与多时代造型连续。</p></div>
               <div class="feature-card"><div class="feature-icon">帧</div><h4>24 FPS 分镜</h4><p>在镜头级对齐时长、动作和总画格。</p></div>
             </div>
@@ -780,6 +898,110 @@ function overviewPage() {
               <div class="check-item"><span class="check-icon ${state.photos.groom ? "" : "pending"}">${state.photos.groom ? "✓" : "!"}</span><div class="check-copy"><strong>男主角照片</strong><small>${state.photos.groom ? "已上传，可用于身份参考" : "进入人物设定上传"}</small></div></div>
               <div class="check-item"><span class="check-icon ${state.photos.bride ? "" : "pending"}">${state.photos.bride ? "✓" : "!"}</span><div class="check-copy"><strong>女主角照片</strong><small>${state.photos.bride ? "已上传，可用于身份参考" : "进入人物设定上传"}</small></div></div>
               <div class="check-item"><span class="check-icon ${runtime.online ? "" : "pending"}">4</span><div class="check-copy"><strong>统一模型服务</strong><small>${runtime.online ? "本地服务在线，可提交生成任务" : "运行 npm start 后启用"}</small></div></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function workflowReady(stepNumber) {
+  const assets = runtime.assets || [];
+  const count = (kind) => assets.filter((asset) => asset.kind === kind).length;
+  if (stepNumber === 1) {
+    return Boolean(
+      state.groom &&
+        state.bride &&
+        state.story.trim().length >= 20 &&
+        ["origin", "knowing", "confirm", "companionship", "promise"].every(
+          (key) => String(state.storyBeats?.[key] || "").trim().length > 0
+        )
+    );
+  }
+  if (stepNumber === 2) return treatment.acts?.length === 5;
+  if (stepNumber === 3) return Boolean(state.workflow?.approvals?.[2]);
+  if (stepNumber === 4 || stepNumber === 5) return count("voice") > 0;
+  if (stepNumber === 6) return storyboard.length > 0;
+  if (stepNumber === 7) {
+    return runtime.looks.some((look) => look.imagePath) || count("image") > 0;
+  }
+  if (stepNumber === 8) {
+    return runtime.looks.filter((look) => look.imagePath).length + count("image") >= 3;
+  }
+  if (stepNumber === 9) {
+    return count("video") > 0 || count("project-photo") >= 2 || count("export") > 0;
+  }
+  if (stepNumber === 10) return count("music") > 0;
+  if (stepNumber === 11 || stepNumber === 12) {
+    return count("voice") > 0 && count("music") > 0;
+  }
+  if (stepNumber >= 13) return count("export") > 0;
+  return false;
+}
+
+function wizardPage() {
+  const workflow = state.workflow || { currentStep: 1, approvals: {} };
+  const currentStep = Math.min(14, Math.max(1, Number(workflow.currentStep || 1)));
+  const current = WIZARD_STEPS[currentStep - 1];
+  const ready = workflowReady(currentStep);
+  const completed = Object.keys(workflow.approvals || {}).filter(
+    (key) => workflow.approvals[key]
+  ).length;
+  const allDone = completed >= 14;
+  return `
+    <div class="page">
+      ${pageHeader("wizard", "以真实故事为入口，先补齐素材中心，再按顺序确认旁白、静帧、视频、音乐、混音和交付。不会跳过人工确认。")}
+      <section class="project-summary card" style="margin-bottom:20px;">
+        <p class="eyebrow">GUIDED WEDDING FILM</p>
+        <h3>${allDone ? "14 步制作流程已完成" : `第 ${currentStep} / 14 步 · ${esc(current.title)}`}</h3>
+        <div class="couple">${esc(coupleName())} · 已确认 ${completed} 步</div>
+        <div class="summary-meta">
+          <div class="summary-meta-item"><span>当前任务</span><strong>${allDone ? "成片与工程已交付" : esc(current.subtitle)}</strong></div>
+          <div class="summary-meta-item"><span>当前放行状态</span><strong>${allDone ? "全部确认完成" : ready ? "素材已就绪，可人工确认" : "等待补齐本步素材"}</strong></div>
+          <div class="summary-meta-item"><span>项目模板</span><strong>${esc(runtime.templates.find((item) => item.id === runtime.projects.find((project) => project.id === currentProjectId)?.templateId)?.title || "尚未应用")}</strong></div>
+          <div class="summary-meta-item"><span>项目资产</span><strong>${runtime.assets.length} 份</strong></div>
+        </div>
+      </section>
+      <div class="wizard-layout">
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>制作流程</h2><p>已完成和可确认步骤会显示状态</p></div><button class="text-button" data-action="reset-workflow">从头开始</button></div>
+          <div class="wizard-steps">
+            ${WIZARD_STEPS.map((step) => {
+              const done = Boolean(workflow.approvals?.[step.number]);
+              const isCurrent = step.number === currentStep;
+              const can = workflowReady(step.number);
+              return `
+                <button class="wizard-step ${done ? "done" : ""} ${isCurrent ? "current" : ""}" data-route="${step.route}">
+                  <span class="wizard-step-no">${done ? "✓" : String(step.number).padStart(2, "0")}</span>
+                  <span class="wizard-step-copy"><strong>${esc(step.title)}</strong><small>${esc(step.subtitle)}</small></span>
+                  <span class="badge ${done ? "green" : isCurrent ? "red" : can ? "gold" : "gray"}">${done ? "已确认" : isCurrent ? "进行中" : can ? "可确认" : "待素材"}</span>
+                </button>`;
+            }).join("")}
+          </div>
+        </section>
+        <div class="stack">
+          <section class="card card-pad">
+            <div class="section-title"><div><h2>当前步骤需要你做什么</h2><p>第 ${currentStep} 步 · ${esc(current.title)}</p></div></div>
+            <div class="notice red">${icon("sparkle")}<div><strong>${esc(current.subtitle)}</strong>${ready ? "材料已满足本步最低条件。请先人工查看或试听，再确认进入下一步。" : "当前材料仍不完整。完成对应操作后按钮会自动变为可确认。"}</div></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
+              <button class="button secondary" data-route="${current.route}">进入本步工作区</button>
+              ${allDone ? '<button class="button primary" data-route="export">查看正式交付</button>' : `<button class="button primary" data-action="approve-workflow-step" ${ready ? "" : "disabled"}>${icon("arrow")}确认本步并继续</button>`}
+            </div>
+          </section>
+          <section class="card card-pad">
+            <div class="section-title"><div><h2>素材中心检查</h2><p>没有素材就不生成画面</p></div><button class="text-button" data-route="assets">打开素材中心 →</button></div>
+            <div class="checklist">
+              ${[
+                ["新人照片", state.photoSources?.groom && state.photoSources?.bride],
+                ["故事与五幕", treatment.acts?.length === 5],
+                ["模板或参考片", runtime.templates.length > 0],
+                ["人物造型", runtime.looks.some((look) => look.imagePath)],
+                ["旁白", runtime.assets.some((asset) => asset.kind === "voice")],
+                ["音乐", runtime.assets.some((asset) => asset.kind === "music")],
+                ["视频或其他镜头", runtime.assets.some((asset) => asset.kind === "video" || asset.kind === "project-photo")],
+                ["字幕", runtime.assets.some((asset) => asset.kind === "subtitle")]
+              ].map(([label, done]) => `<div class="check-item"><span class="check-icon ${done ? "" : "pending"}">${done ? "✓" : "!"}</span><div class="check-copy"><strong>${label}</strong><small>${done ? "已就绪" : "尚缺，请在素材中心补齐"}</small></div></div>`).join("")}
             </div>
           </section>
         </div>
@@ -854,6 +1076,29 @@ function templatesPage() {
               </div>`
             : `<div class="empty-state"><div><div class="empty-state-symbol">模</div><h3>还没有模板</h3><p>上传视频或粘贴抖音链接后，系统会建立可编辑的模板配方。</p></div></div>`
         }
+      </section>
+      <section class="card card-pad" style="margin-top:18px;">
+        <div class="section-title">
+          <div><h2>VVV · Remotion 可编辑模板库</h2><p>8 个开源婚礼模板，预览来自 actionow-ai/vvv，MIT 许可；本项目记录其风格参数，完整 Remotion 工程由外部 VVV 路由生成。</p></div>
+          <span class="badge gold">可编辑工程</span>
+        </div>
+        <div class="asset-grid">
+          ${VVV_STYLE_PRESETS.map(
+            (preset) => `
+            <article class="asset-card card">
+              <div class="asset-preview"><img src="${preset.image}" alt="${esc(preset.title)}" /></div>
+              <div class="asset-info">
+                <strong>${esc(preset.title)}</strong>
+                <small>${esc(preset.format)} · ${esc(preset.description)}</small>
+                <div style="display:flex;gap:6px;margin-top:10px;">
+                  <button class="button secondary small-button" data-action="use-vvv-style" data-vvv-id="${preset.id}">套用风格参数</button>
+                  <button class="button ghost small-button" data-action="create-vvv-project" data-vvv-id="${preset.id}">生成可编辑工程</button>
+                </div>
+              </div>
+            </article>`
+          ).join("")}
+        </div>
+        <div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>许可说明</strong>VVV 代码与模板采用 MIT；预览媒体按 VVV 的 MEDIA_LICENSE 使用。应用内的 Final Cut 渲染仍由本地 FFmpeg 完成，不把外部模板伪装为已生成工程。</div></div>
       </section>
     </div>
   `;
@@ -947,14 +1192,27 @@ function storyPage() {
             </div>
           </div>
           <div class="divider"></div>
+          <div class="section-title"><div><h3>五幕故事采集</h3><p>按相识、相知、确认、相伴、承诺逐幕填写；没有发生的经历不要补写</p></div><button class="text-button" data-action="copy-story-card">复制采集卡 →</button></div>
+          <div class="story-beat-grid">
+            ${[
+              ["origin", "第一幕 · 相识", "在哪、什么季节、谁先注意到谁？"],
+              ["knowing", "第二幕 · 相知", "哪件小事让你开始心动？"],
+              ["confirm", "第三幕 · 确认", "在哪、谁开的口、说了什么？"],
+              ["companionship", "第四幕 · 相伴", "日常里最像你们的一个画面？"],
+              ["promise", "第五幕 · 承诺", "婚礼场地、结尾动作、最想说的话？"]
+            ].map(([key, title, hint]) => `<label class="field"><span class="field-label">${title}</span><textarea class="textarea" style="min-height:92px;" data-story-beat="${key}" placeholder="${hint}">${esc(state.storyBeats?.[key] || "")}</textarea></label>`).join("")}
+          </div>
+          <div class="divider"></div>
           <div class="field">
             <label for="story-content">爱情故事原文</label>
             <textarea id="story-content" class="textarea" data-field="story" style="min-height: 170px;">${esc(state.story)}</textarea>
-            <span class="field-hint">系统会优先从原文中提取相逢、陪伴与承诺三个真实节点，不会把无法识别的信息自动编成事实。</span>
+            <span class="field-hint">系统会优先使用五幕填写内容，再从原文中提取补充事实；不会把无法识别的信息自动编成事实。</span>
           </div>
           <div class="section-title" style="margin-top: 16px; margin-bottom: 0;">
-            <div class="chip-row"><span class="chip">真实细节优先</span><span class="chip">三幕结构</span><span class="chip">可人工调整</span></div>
+            <div class="chip-row"><span class="chip">真实细节优先</span><span class="chip">五幕结构</span><span class="chip">可人工调整</span></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <a class="button ghost" href="./public/story-intake.html" target="_blank" rel="noreferrer">打开故事采集卡</a>
+              <button class="button ghost" data-action="copy-story-card">${icon("copy")}复制故事采集卡</button>
               <button class="button secondary" data-action="build-treatment">${icon("sparkle")}本地快速大纲</button>
               <button class="button primary" data-action="generate-story-ai">${icon("sparkle")}AI 故事与分镜</button>
             </div>
@@ -1563,25 +1821,95 @@ function exportPage() {
 function assetsPage() {
   const assets = (runtime.assets || []).filter((asset) => asset.kind !== "template-source");
   const visuals = runtime.looks.filter((look) => look.imagePath);
+  const categories = [
+    {
+      kind: "project-photo",
+      title: "婚礼照片",
+      hint: "婚纱照、生活照、现场照",
+      accept: "image/*",
+      required: true
+    },
+    {
+      kind: "story-card",
+      title: "故事采集卡",
+      hint: "图片、PDF 或文字资料",
+      accept: "image/*,.pdf,.txt,.doc,.docx",
+      required: true
+    },
+    {
+      kind: "outfit-reference",
+      title: "服装参考",
+      hint: "古装、民国装、现代婚服",
+      accept: "image/*",
+      required: false
+    },
+    {
+      kind: "scene-reference",
+      title: "场景参考",
+      hint: "庭院、老街、婚礼现场",
+      accept: "image/*",
+      required: false
+    },
+    {
+      kind: "video-clip",
+      title: "视频镜头",
+      hint: "生成视频、现场视频或参考片段",
+      accept: "video/*",
+      required: false
+    },
+    {
+      kind: "music",
+      title: "音乐素材",
+      hint: "有授权的 BGM 或原创配乐",
+      accept: "audio/*",
+      required: false
+    },
+    {
+      kind: "voice",
+      title: "旁白录音",
+      hint: "新人、主持或定制配音",
+      accept: "audio/*",
+      required: false
+    }
+  ];
   return `
     <div class="page">
-      ${pageHeader("assets")}
+      ${pageHeader("assets", "素材中心是生成和剪辑的唯一入口。每份照片、故事卡、服装、场景、视频、配音、音乐和字幕都先归档，再被后续镜头引用。")}
+      <div class="notice red" style="margin-bottom:18px;">${icon("shield")}<div><strong>先素材，后生成</strong>缺失人物照片或故事资料时，不应直接进入分镜和视频生成。抖音参考视频只用于学习结构与节奏，不能把原片直接当成客户成片。</div></div>
       <section class="card card-pad">
         <div class="section-title">
           <div><h2>全局资产库</h2><p>${assets.length} 份任务资产 · ${visuals.length} 套已生成造型 · ${runtime.templates.length} 个模板</p></div>
           <button class="button secondary small-button" data-route="characters">${icon("plus")}添加人物照片</button>
         </div>
+        <div class="asset-grid" style="margin-bottom:18px;">
+          ${categories.map((category) => {
+            const count = assets.filter((asset) => asset.kind === category.kind).length;
+            return `
+              <article class="asset-card card">
+                <div class="asset-preview">${category.title.slice(0, 1)}</div>
+                <div class="asset-info">
+                  <strong>${category.title}</strong>
+                  <small>${category.hint} · ${count} 份</small>
+                  <label class="button secondary small-button" for="material-${category.kind}" style="margin-top:9px;width:100%;">${icon("upload")}上传素材</label>
+                  <input id="material-${category.kind}" type="file" accept="${category.accept}" data-material-input="${category.kind}" multiple hidden />
+                </div>
+              </article>`;
+          }).join("")}
+        </div>
+        <div class="section-title"><div><h2>已归档素材</h2><p>任务生成结果会自动进入这里</p></div></div>
         <div class="asset-grid">
           ${
-            assets.length || visuals.length
+            assets.length
               ? assets
                   .map(
                     (asset) => `
                     <article class="asset-card card">
                       <div class="asset-preview">
                         ${
-                          ["image", "look-image", "photo"].includes(asset.kind) && asset.url
-                            ? `<img src="${esc(api.mediaUrl(asset.url))}" alt="${esc(asset.title)}" />`
+                          asset.previewUrl
+                            ? `<img src="${esc(api.mediaUrl(asset.previewUrl))}" alt="${esc(asset.title)}" />`
+                            : ["image", "look-image", "photo", "project-photo", "story-card", "outfit-reference", "scene-reference"].includes(asset.kind) && asset.url
+                              ? `<img src="${esc(api.mediaUrl(asset.url))}" alt="${esc(asset.title)}" />`
                             : asset.kind === "video" && asset.url
                               ? `<video src="${esc(api.mediaUrl(asset.url))}" muted preload="metadata"></video>`
                               : asset.kind === "music" || asset.kind === "voice"
@@ -1590,15 +1918,6 @@ function assetsPage() {
                         }
                       </div>
                       <div class="asset-info"><strong>${esc(asset.title || asset.kind)}</strong><small>${esc(asset.kind)} · ${asset.url ? "可预览" : "仅记录"}</small></div>
-                    </article>`
-                  )
-                  .join("") +
-                visuals
-                  .map(
-                    (look) => `
-                    <article class="asset-card card">
-                      <div class="asset-preview"><img src="${esc(api.mediaUrl(look.imagePath))}" alt="${esc(look.title)}" /></div>
-                      <div class="asset-info"><strong>${esc(look.title)}</strong><small>${esc(look.era)}造型 · Seedream</small></div>
                     </article>`
                   )
                   .join("")
@@ -1671,7 +1990,7 @@ function methodPage() {
 function guidePage() {
   const guides = [
     ["1", "准备真实素材", "输入男女主姓名、婚期和爱情故事。上传双方正面清晰照片，最好再各补一张侧面照。", ["不做虚构身份", "照片只在本机预览", "故事越具体越能写出细节"]],
-    ["2", "共创故事与分镜", "选择一个叙事母题，生成三幕大纲，再检查每个时代是否围绕同一对人物展开。", ["先确认故事再生成画面", "单镜 2–5 秒", "所有镜头按 24 FPS 核对总画格"]],
+    ["2", "共创故事与分镜", "选择一个叙事母题，生成五幕大纲，再检查每个时代是否围绕同一对人物展开。", ["先确认故事再生成画面", "单镜 2–5 秒", "所有镜头按 24 FPS 核对总画格"]],
     ["3", "生成与复核", "在模型中心选择文字、图片、视频、语音和音乐。人物、场景和镜头逐项生成并确认。", ["未知状态只查原任务", "失败任务不重复提交", "生成结果自动归档"]]
   ];
   return `
@@ -1824,6 +2143,11 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("input", (event) => {
+  const storyBeat = event.target.dataset.storyBeat;
+  if (storyBeat) {
+    state.storyBeats = { ...(state.storyBeats || {}), [storyBeat]: event.target.value };
+    return;
+  }
   const field = event.target.dataset.field;
   if (!field) return;
   if (field === "duration") {
@@ -1850,6 +2174,13 @@ document.addEventListener("change", async (event) => {
 
   if (event.target.matches("[data-photo-movie-input]")) {
     await uploadPhotoMovieFiles([...event.target.files]);
+  }
+
+  if (event.target.matches("[data-material-input]")) {
+    await uploadMaterialFiles(
+      event.target.dataset.materialInput,
+      [...event.target.files]
+    );
   }
 
   if (event.target.matches("[data-shot-status]")) {
@@ -1895,6 +2226,58 @@ function findNavNode(id, nodes = NAV_TREE) {
 
 async function handleAction(button) {
   const action = button.dataset.action;
+  if (action === "approve-workflow-step") {
+    const workflow = state.workflow || { currentStep: 1, approvals: {} };
+    const step = Math.min(14, Math.max(1, Number(workflow.currentStep || 1)));
+    if (!workflowReady(step)) {
+      showToast("本步骤素材尚未就绪，请先完成素材中心要求");
+      return;
+    }
+    state.workflow = {
+      currentStep: Math.min(15, step + 1),
+      approvals: {
+        ...(workflow.approvals || {}),
+        [step]: {
+          approved: true,
+          approvedAt: new Date().toISOString()
+        }
+      }
+    };
+    saveState({ quiet: true });
+    render();
+    showToast(step === 14 ? "14 步制作流程已全部确认" : `第 ${step} 步已确认，进入第 ${step + 1} 步`);
+  }
+  if (action === "reset-workflow") {
+    state.workflow = { currentStep: 1, approvals: {} };
+    saveState({ quiet: true });
+    render();
+    showToast("制作向导已回到第 1 步，素材不会删除");
+  }
+  if (action === "copy-story-card") {
+    await copyText(
+      [
+        "婚礼微电影故事采集卡",
+        `新郎：${state.groom}`,
+        `新娘：${state.bride}`,
+        `婚期：${state.date}`,
+        `画幅：${state.aspect}`,
+        `目标时长：${state.duration} 秒`,
+        "",
+        "现有爱情故事：",
+        state.story,
+        "",
+        "五幕补充：",
+        `1. 相识：${state.storyBeats?.origin || ""}`,
+        `2. 相知：${state.storyBeats?.knowing || ""}`,
+        `3. 确认：${state.storyBeats?.confirm || ""}`,
+        `4. 相伴：${state.storyBeats?.companionship || ""}`,
+        `5. 承诺：${state.storyBeats?.promise || ""}`,
+        "添加项：有意义的地点、物品、宠物、常说的话。",
+        "禁忌：不想出现的人、事件、服装或画面。",
+        "音乐：有授权的纯音乐，或交给制作方定制。"
+      ].join("\n")
+    );
+  }
   if (action === "refresh-runtime") {
     await refreshRuntime();
     showToast("本地项目与任务已刷新");
@@ -1990,6 +2373,53 @@ async function handleAction(button) {
     await refreshRuntime();
     showToast("模板已应用到当前婚礼项目");
   }
+  if (action === "use-vvv-style") {
+    const preset = VVV_STYLE_PRESETS.find((item) => item.id === button.dataset.vvvId);
+    if (!preset) return;
+    state.vvvStyle = preset.id;
+    saveState({ quiet: true });
+    render();
+    showToast(`已记录 VVV 风格：${preset.title}`);
+  }
+  if (action === "create-vvv-project") {
+    const preset = VVV_STYLE_PRESETS.find((item) => item.id === button.dataset.vvvId);
+    const photoAssets = runtime.assets.filter(
+      (asset) => asset.kind === "project-photo" && asset.localPath
+    );
+    if (!preset || !photoAssets.length) {
+      showToast("请先在素材中心上传至少一张婚礼照片");
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "正在创建 Remotion 工程…";
+    const payload = {
+      projectId: currentProjectId,
+      template: preset.id,
+      format: state.aspect,
+      assetIds: photoAssets.map((asset) => asset.id),
+      allowRepeat: false
+    };
+    let result;
+    try {
+      result = await api.createVvvProject(payload);
+    } catch (error) {
+      if (/INSUFFICIENT_PHOTOS|needs at least/i.test(error.message)) {
+        const allow = window.confirm(
+          "当前照片数量少于该模板最低要求。是否允许重复使用已有照片来生成可编辑工程？"
+        );
+        if (!allow) {
+          button.disabled = false;
+          button.textContent = "生成可编辑工程";
+          return;
+        }
+        result = await api.createVvvProject({ ...payload, allowRepeat: true });
+      } else {
+        throw error;
+      }
+    }
+    await refreshRuntime();
+    showToast(`可编辑工程已创建：${result.item.projectDir}`);
+  }
   if (action === "test-model") {
     button.disabled = true;
     button.textContent = "测试中…";
@@ -2072,8 +2502,9 @@ async function handleAction(button) {
       projectId: currentProjectId,
       modelId: model.id,
       prompt: [
-        `请为婚礼微电影生成三幕故事和分镜。新郎：${state.groom}；新娘：${state.bride}。`,
+        `请为婚礼微电影生成五幕故事和分镜：相识、相知、确认、相伴、承诺。新郎：${state.groom}；新娘：${state.bride}。`,
         `真实故事：${state.story}`,
+        `五幕资料：相识=${state.storyBeats?.origin || "未填"}；相知=${state.storyBeats?.knowing || "未填"}；确认=${state.storyBeats?.confirm || "未填"}；相伴=${state.storyBeats?.companionship || "未填"}；承诺=${state.storyBeats?.promise || "未填"}`,
         `主题：${state.theme}；时长：${state.duration} 秒；情绪：${state.tone}；画幅：${state.aspect}。`,
         "只输出 JSON，包含 logline、visualLanguage、acts 和 shots。shots 每项包含 start,end,title,scene,framing,camera,action,prompt。",
         "所有镜头加起来必须等于总时长。不要增加用户没有提供的真实亲人姓名或事故。"
@@ -2341,6 +2772,38 @@ async function uploadPhotoMovieFiles(files) {
   }
   await refreshRuntime();
   showToast(`已加入 ${uploaded} 张照片电影素材`);
+}
+
+async function uploadMaterialFiles(kind, files) {
+  if (!runtime.online || !files.length) return;
+  let uploaded = 0;
+  for (const file of files) {
+    try {
+      await api.uploadAsset(file, {
+        kind,
+        projectId: currentProjectId,
+        title: file.name.replace(/\.[^.]+$/, "")
+      });
+      uploaded += 1;
+    } catch (error) {
+      showToast(`${file.name} 上传失败：${error.message}`);
+    }
+  }
+  await refreshRuntime();
+  showToast(`已归档 ${uploaded} 份${materialLabel(kind)}`);
+}
+
+function materialLabel(kind) {
+  const labels = {
+    "project-photo": "婚礼照片",
+    "story-card": "故事资料",
+    "outfit-reference": "服装参考",
+    "scene-reference": "场景参考",
+    "video-clip": "视频素材",
+    music: "音乐",
+    voice: "旁白"
+  };
+  return labels[kind] || "素材";
 }
 
 async function trackJob(jobId, label = "模型任务") {
