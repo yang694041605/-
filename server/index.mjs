@@ -25,6 +25,7 @@ import {
 } from "./ark.mjs";
 import {
   detectSceneCuts,
+  extractContactSheets,
   extractCover,
   extractVideoSegment,
   inferExtension,
@@ -676,6 +677,11 @@ async function analyzeTemplate(templateId, jobId, deep = false) {
   if (!template) throw new Error("模板不存在");
   updateEntity("template", templateId, { status: "analyzing" });
   const cuts = await detectSceneCuts(template.videoPath);
+  const contactSheetDir = resolve(mediaRoot, "templates", templateId, "contact");
+  const contactSheetPaths = await extractContactSheets(
+    template.videoPath,
+    contactSheetDir
+  ).catch(() => []);
   const shots = sceneCutsToShots(cuts, template.duration);
   let aiAnalysis = null;
   let aiAnalysisError = "";
@@ -729,6 +735,8 @@ async function analyzeTemplate(templateId, jobId, deep = false) {
   };
   const updated = updateEntity("template", templateId, {
     status: "ready",
+    contactSheetPaths,
+    contactSheetUrls: contactSheetPaths.map(mediaUrlForPath),
     recipe
   });
   updateJob(jobId, {

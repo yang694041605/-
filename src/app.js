@@ -46,7 +46,7 @@ const DEFAULT_PROJECT = {
   vvvStyle: ""
 };
 
-const NAV_TREE = [
+const LEGACY_NAV_TREE = [
   {
     id: "workbench",
     label: "项目工作台",
@@ -281,6 +281,95 @@ const NAV_TREE = [
   }
 ];
 
+const NAV_TREE = [
+  {
+    id: "material-center",
+    label: "素材中心",
+    symbol: "材",
+    route: "assets"
+  },
+  {
+    id: "guide-14-steps",
+    label: "14 步制作",
+    symbol: "导",
+    route: "wizard",
+    children: [
+      {
+        id: "step-phase-story",
+        label: "故事与文案",
+        symbol: "文",
+        children: [
+          { id: "step-01", label: "01 故事采集", route: "step1" },
+          { id: "step-02", label: "02 文案写作包", route: "step2" },
+          { id: "step-03", label: "03 新人确认文案", route: "step3" }
+        ]
+      },
+      {
+        id: "step-phase-voice",
+        label: "旁白与声音",
+        symbol: "声",
+        children: [
+          { id: "step-04", label: "04 音色试听", route: "step4" },
+          { id: "step-05", label: "05 完整旁白", route: "step5" }
+        ]
+      },
+      {
+        id: "step-phase-visual",
+        label: "分镜与画面",
+        symbol: "镜",
+        children: [
+          { id: "step-06", label: "06 分镜设计", route: "step6" },
+          { id: "step-07", label: "07 重点静帧", route: "step7" },
+          { id: "step-08", label: "08 剩余分镜图片", route: "step8" },
+          { id: "step-09", label: "09 图生视频", route: "step9" }
+        ]
+      },
+      {
+        id: "step-phase-finish",
+        label: "音乐与交付",
+        symbol: "成",
+        children: [
+          { id: "step-10", label: "10 BGM 试听", route: "step10" },
+          { id: "step-11", label: "11 配音与 BGM 试混", route: "step11" },
+          { id: "step-12", label: "12 完整混音", route: "step12" },
+          { id: "step-13", label: "13 字幕预览", route: "step13" },
+          { id: "step-14", label: "14 正式交付", route: "step14" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "template-resource",
+    label: "模板库",
+    symbol: "模",
+    route: "templates"
+  },
+  {
+    id: "model-resource",
+    label: "模型中心",
+    symbol: "型",
+    route: "models"
+  },
+  {
+    id: "job-resource",
+    label: "任务中心",
+    symbol: "单",
+    route: "jobs"
+  },
+  {
+    id: "analysis-resource",
+    label: "参考片分析",
+    symbol: "析",
+    route: "method"
+  },
+  {
+    id: "guide-resource",
+    label: "操作说明",
+    symbol: "问",
+    route: "guide"
+  }
+];
+
 const ROUTE_META = {
   overview: ["项目工作台", "把真实故事，拍成只属于你们的一部电影"],
   wizard: ["14 步婚礼电影向导", "每一步都有明确素材、人工确认和下一步，不会一次盲渲染到底"],
@@ -403,21 +492,28 @@ const ANALYSIS_SEGMENTS = [
 ];
 
 const WIZARD_STEPS = [
-  { number: 1, title: "故事采集", subtitle: "新人资料、五幕故事与补充照片", route: "story" },
-  { number: 2, title: "文案写作包", subtitle: "生成旁白初稿与事实对应", route: "story" },
-  { number: 3, title: "新人确认文案", subtitle: "新人明确确认当前版本", route: "story" },
-  { number: 4, title: "音色试听", subtitle: "生成并试听中文旁白", route: "audio" },
-  { number: 5, title: "完整旁白", subtitle: "确认读音、情绪、停顿和时长", route: "audio" },
-  { number: 6, title: "分镜设计", subtitle: "按旁白实际节奏确认镜头表", route: "storyboard" },
-  { number: 7, title: "三个重点静帧", subtitle: "先确认男女主关键造型与时代", route: "looks" },
-  { number: 8, title: "剩余分镜图片", subtitle: "补齐场景、服装和关键帧", route: "generate" },
-  { number: 9, title: "图生视频", subtitle: "逐镜生成、检查身份与动作", route: "generate" },
-  { number: 10, title: "BGM 风格试听", subtitle: "选择情绪、节奏和授权音乐", route: "audio" },
-  { number: 11, title: "配音与 BGM 试混", subtitle: "确认声音层级与情绪转折", route: "audio" },
-  { number: 12, title: "完整混音", subtitle: "全长检查旁白、音乐和留白", route: "audio" },
-  { number: 13, title: "字幕预览", subtitle: "完整观看带字幕样片", route: "export" },
-  { number: 14, title: "正式成片交付", subtitle: "导出 MP4、SRT、工程和检查记录", route: "export" }
+  { number: 1, title: "故事采集", subtitle: "新人资料、五幕故事与补充照片", route: "step1" },
+  { number: 2, title: "文案写作包", subtitle: "生成旁白初稿与事实对应", route: "step2" },
+  { number: 3, title: "新人确认文案", subtitle: "新人明确确认当前版本", route: "step3" },
+  { number: 4, title: "音色试听", subtitle: "生成并试听中文旁白", route: "step4" },
+  { number: 5, title: "完整旁白", subtitle: "确认读音、情绪、停顿和时长", route: "step5" },
+  { number: 6, title: "分镜设计", subtitle: "按旁白实际节奏确认镜头表", route: "step6" },
+  { number: 7, title: "三个重点静帧", subtitle: "先确认男女主关键造型与时代", route: "step7" },
+  { number: 8, title: "剩余分镜图片", subtitle: "补齐场景、服装和关键帧", route: "step8" },
+  { number: 9, title: "图生视频", subtitle: "逐镜生成、检查身份与动作", route: "step9" },
+  { number: 10, title: "BGM 风格试听", subtitle: "选择情绪、节奏和授权音乐", route: "step10" },
+  { number: 11, title: "配音与 BGM 试混", subtitle: "确认声音层级与情绪转折", route: "step11" },
+  { number: 12, title: "完整混音", subtitle: "全长检查旁白、音乐和留白", route: "step12" },
+  { number: 13, title: "字幕预览", subtitle: "完整观看带字幕样片", route: "step13" },
+  { number: 14, title: "正式成片交付", subtitle: "导出 MP4、SRT、工程和检查记录", route: "step14" }
 ];
+
+for (const step of WIZARD_STEPS) {
+  ROUTE_META[step.route] = [
+    `第 ${step.number} 步 · ${step.title}`,
+    step.subtitle
+  ];
+}
 
 const VVV_STYLE_PRESETS = [
   {
@@ -481,18 +577,13 @@ const VVV_STYLE_PRESETS = [
 let state = loadState();
 let activeRoute = "overview";
 let activeFocus = null;
+let selectedMusicMood = "warm-cinematic";
 let openNavIds = new Set([
-  "workbench",
-  "story-group",
-  "story-co-create",
-  "story-theme",
-  "character-group",
-  "production",
-  "scene-group",
-  "storyboard-group",
-  "ai-production",
-  "edit-deliver",
-  "reference"
+  "guide-14-steps",
+  "step-phase-story",
+  "step-phase-voice",
+  "step-phase-visual",
+  "step-phase-finish"
 ]);
 let treatment = buildStoryTreatment(state);
 let storyboard = buildStoryboard(state);
@@ -727,6 +818,9 @@ function renderNavNode(node, depth) {
 
 function getView(route) {
   const views = {
+    ...Object.fromEntries(
+      WIZARD_STEPS.map((step) => [step.route, () => workflowStepPage(step.number)])
+    ),
     overview: overviewPage,
     wizard: wizardPage,
     templates: templatesPage,
@@ -1008,6 +1102,182 @@ function wizardPage() {
       </div>
     </div>
   `;
+}
+
+function workflowStepPage(number) {
+  const step = WIZARD_STEPS[number - 1];
+  const ready = workflowReady(number);
+  const completed = Boolean(state.workflow?.approvals?.[number]);
+  return `
+    <div class="page">
+      ${pageHeader(step.route)}
+      <section class="step-context card">
+        <div class="step-context-index">${String(number).padStart(2, "0")}</div>
+        <div class="step-context-copy">
+          <small>第 ${number} / 14 步</small>
+          <strong>${esc(step.title)}</strong>
+          <span>${esc(step.subtitle)}</span>
+        </div>
+        <span class="badge ${completed ? "green" : ready ? "gold" : "gray"}">${completed ? "已确认" : ready ? "素材可确认" : "等待素材"}</span>
+        <button class="button ghost small-button" data-route="wizard">返回流程总览</button>
+      </section>
+      ${workflowStepContent(number)}
+      <section class="step-confirm card">
+        <div><strong>${ready ? "本步骤的最低价材料条件已经满足" : "本步骤仍有材料缺口"}</strong><p>${ready ? "请先实际检查画面或试听，再确认进入下一步。确认记录会随项目保存。" : "返回本页上方或素材中心补齐必要材料后，确认按钮才会开放。"}</p></div>
+        <div class="step-confirm-actions">
+          ${number > 1 ? `<button class="button ghost small-button" data-route="step${number - 1}">上一步</button>` : ""}
+          <button class="button primary" data-action="approve-workflow-step" ${ready ? "" : "disabled"}>${icon("arrow")}确认并进入第 ${Math.min(14, number + 1)} 步</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function workflowStepContent(number) {
+  const voiceAssets = runtime.assets.filter((asset) => asset.kind === "voice" && asset.url);
+  const musicAssets = runtime.assets.filter((asset) => asset.kind === "music" && asset.url);
+  const imageAssets = runtime.assets.filter((asset) =>
+    ["image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
+  );
+  const videoAssets = runtime.assets.filter((asset) => asset.kind === "video" && asset.url);
+  const exports = runtime.assets.filter((asset) => asset.kind === "export" && asset.url);
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  const template = runtime.templates.find((item) => item.id === project?.templateId);
+
+  const raw = {
+    1: `
+      <div class="content-grid">
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>新人资料与五幕故事</h2><p>先收集真实事实，再进入任何图像生成</p></div><button class="button secondary small-button" data-action="copy-story-card">${icon("copy")}复制采集卡</button></div>
+          <div class="project-brief">
+            <div class="field"><label>男主角姓名</label><input class="input" data-field="groom" value="${esc(state.groom)}" /></div>
+            <div class="field"><label>女主角姓名</label><input class="input" data-field="bride" value="${esc(state.bride)}" /></div>
+            <div class="field"><label>婚礼日期</label><input class="input" type="date" data-field="date" value="${esc(state.date)}" /></div>
+            <div class="field"><label>城市</label><input class="input" data-field="city" value="${esc(state.city)}" /></div>
+          </div>
+          <div class="story-beat-grid" style="margin-top:14px;">
+            ${[
+              ["origin", "01 相识", "第一次见面的地点、季节、谁先注意到谁？"],
+              ["knowing", "02 相知", "哪件小事让你开始心动？"],
+              ["confirm", "03 确认", "在哪、谁开的口、说了什么？"],
+              ["companionship", "04 相伴", "日常里最像你们的一个画面？"],
+              ["promise", "05 承诺", "婚礼场地、结尾动作、最想说的一句话？"]
+            ].map(([key, title, hint]) => `<label class="field"><span class="field-label">${title}</span><textarea class="textarea" data-story-beat="${key}" placeholder="${hint}">${esc(state.storyBeats?.[key] || "")}</textarea></label>`).join("")}
+          </div>
+        </section>
+        <div class="stack">
+          ${workflowMaterialSummary()}
+          <section class="card card-pad">
+            <div class="section-title"><div><h3>新人素材</h3><p>人物照片决定后续换脸相似度</p></div></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="button secondary" data-route="characters">上传男女主照片</button><a class="button ghost" href="./public/story-intake.html" target="_blank" rel="noreferrer">打开故事采集卡</a></div>
+          </section>
+        </div>
+      </div>`,
+    2: `
+      <div class="content-grid">
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>生成文案写作包</h2><p>按五幕事实生成旁白，再由制作方通读</p></div><span class="badge gold">文字模型</span></div>
+          <textarea class="textarea" data-field="story" style="min-height:150px;">${esc(state.story)}</textarea>
+          <button class="button primary" style="width:100%;margin-top:12px;" data-action="generate-story-ai">${icon("sparkle")}生成五幕文案与分镜初稿</button>
+          <button class="button secondary" style="width:100%;margin-top:8px;" data-action="build-treatment">使用本地结构快速重排</button>
+        </section>
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>五幕初稿</h2><p>只看已填写事实</p></div></div>
+          <div class="treatment-list">${treatment.acts.map((act, index) => `<article class="act-card"><div class="act-index">${index + 1}</div><div><small>${esc(act.label)}</small><h4>${esc(act.title)}</h4><p>${esc(act.summary)}</p></div></article>`).join("")}</div>
+        </section>
+      </div>`,
+    3: `
+      <div class="content-grid">
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>待新人确认版本</h2><p>确认前不进入正式分镜</p></div><span class="badge red">人工确认</span></div>
+          <p class="small" style="line-height:1.85;">${esc(treatment.logline)}</p>
+          ${treatment.acts.map((act, index) => `<div class="prompt-block"><label>第 ${index + 1} 幕 · ${esc(act.title)}</label><p>${esc(act.summary)}</p></div>`).join("")}
+        </section>
+        <section class="card card-pad">
+          <div class="section-title"><div><h3>确认清单</h3><p>只有新人明确确认后才能继续</p></div></div>
+          <div class="checklist"><div class="check-item"><span class="check-icon pending">1</span><div class="check-copy"><strong>姓名和日期</strong><small>${esc(coupleName())} · ${formatDate(state.date)}</small></div></div><div class="check-item"><span class="check-icon pending">2</span><div class="check-copy"><strong>事实与改编边界</strong><small>没有把想象写成真实经历</small></div></div><div class="check-item"><span class="check-icon pending">3</span><div class="check-copy"><strong>新人确认</strong><small>由制作方转达明确确认结果</small></div></div></div>
+          <button class="button primary" style="width:100%;margin-top:14px;" data-action="copy-script-confirmation">${icon("copy")}复制给新人确认</button>
+        </section>
+      </div>`,
+    4: `
+      <section class="card card-pad">
+        <div class="section-title"><div><h2>音色试听</h2><p>同一句文案生成多个候选，不能只看模型名</p></div><span class="badge gold">${familyModels("voice").length} 个音色</span></div>
+        <textarea class="textarea" data-speech-text style="min-height:110px;">从第一次相遇，到决定一起走完余生。谢谢你，成为我故事里最重要的人。</textarea>
+        <div class="feature-grid" style="margin-top:14px;">
+          ${familyModels("voice").map((voice) => `<article class="feature-card"><div class="feature-icon">声</div><h4>${esc(voice.label)}</h4><p>${esc(voice.model)} · ${esc(voice.status)}</p><button class="button secondary small-button" style="margin-top:12px;" data-action="audition-voice" data-model-id="${voice.id}">生成试听</button></article>`).join("")}
+        </div>
+        <div class="divider"></div>
+        <div class="section-title"><div><h3>试听记录</h3><p>最近生成的旁白</p></div></div>
+        ${renderAudioAssets(voiceAssets)}
+      </section>`,
+    5: `
+      <div class="content-grid">
+        <section class="card card-pad"><div class="section-title"><div><h2>完整旁白</h2><p>完整试听通过后才进入分镜</p></div></div><textarea class="textarea" data-speech-text style="min-height:190px;">从第一次相遇，到一起走过漫长岁月。今天，我们终于站到彼此身边。愿余生朝朝暮暮，岁岁平安。</textarea><button class="button primary" style="width:100%;margin-top:12px;" data-action="generate-speech">${icon("play")}生成完整旁白</button><audio data-audio-preview controls hidden style="width:100%;margin-top:12px;"></audio></section>
+        <section class="card card-pad"><div class="section-title"><div><h3>已生成旁白</h3><p>${voiceAssets.length} 条</p></div></div>${renderAudioAssets(voiceAssets)}</section>
+      </div>`,
+    6: `
+      <section class="card card-pad">
+        <div class="section-title"><div><h2>按旁白节奏拆镜</h2><p>${storyboard.length} 镜 · ${state.duration} 秒 · ${state.duration * 24} 帧</p></div><button class="button secondary small-button" data-action="build-storyboard">重新推导</button><button class="button primary small-button" data-route="storyboard">打开完整分镜表</button></div>
+        <div class="generation-list">${storyboard.slice(0, 10).map((shot) => `<div class="generation-row"><div class="shot-number">${String(shot.number).padStart(2, "0")}</div><div class="generation-copy"><strong>${esc(shot.title)}</strong><small>${esc(shot.scene)} · ${esc(shot.shot)} · ${esc(shot.move)}</small></div><span class="generation-meta">${shot.duration}s</span><span class="generation-meta">${Math.round(shot.duration * 24)} 帧</span><span class="badge ${shot.status === "已确认" ? "green" : "gray"}">${shot.status}</span></div>`).join("")}</div>
+      </section>`,
+    7: `
+      <div class="content-grid">
+        <section class="card card-pad"><div class="section-title"><div><h2>先做三个重点静帧</h2><p>优先解决男女主正脸、时代造型和牵手动作</p></div><button class="button secondary small-button" data-route="looks">完整造型库</button></div><div class="feature-grid">${["古代婚服","民国造型","今生婚服"].map((title,index)=>`<article class="feature-card"><div class="feature-icon">${index+1}</div><h4>${title}</h4><p>先用真实照片生成身份卡，再选服装。</p><button class="button secondary small-button" data-route="looks" style="margin-top:12px;">选择造型</button></article>`).join("")}</div></section>
+        <section class="card card-pad"><div class="section-title"><div><h3>静帧资产</h3><p>${imageAssets.length} 张</p></div></div>${renderImageAssets(imageAssets.slice(0,8))}</section>
+      </div>`,
+    8: `
+      <div class="content-grid">
+        <section class="card card-pad"><div class="section-title"><div><h2>剩余分镜图片</h2><p>按镜号生成，不批量盲出图</p></div><span class="badge gold">${imageAssets.length} 张</span></div><button class="button primary" data-route="generate">进入图片生成中心</button></section>
+        <section class="card card-pad"><div class="section-title"><div><h3>图片检查</h3><p>脸、手、服装、时代和构图</p></div></div><div class="checklist"><div class="check-item"><span class="check-icon pending">1</span><div class="check-copy"><strong>同一张脸</strong><small>跨镜保持五官比例与发际线</small></div></div><div class="check-item"><span class="check-icon pending">2</span><div class="check-copy"><strong>正确手部</strong><small>牵手动作不得粘连或增指</small></div></div><div class="check-item"><span class="check-icon pending">3</span><div class="check-copy"><strong>服装连续</strong><small>每镜绑定明确造型资产</small></div></div></div></section>
+      </div>${renderImageAssets(imageAssets.slice(0,12))}`,
+    9: `
+      <div class="content-grid">
+        <section class="card card-pad"><div class="section-title"><div><h2>参考视频人物替换</h2><p>${template ? esc(template.title) : "尚未应用抖音模板"}</p></div><span class="badge gold">4–8 秒单镜</span></div><textarea class="textarea" data-video-prompt style="min-height:150px;">保持参考视频的人物动作、机位、镜头运动和剪辑节奏；将男主角替换为上传照片中的${state.groom}，女主角替换为${state.bride}。保持面部身份、发型、服装、手部接触和身高差连续。背景保持原参考视频不变。</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="button ghost small-button" data-action="replacement-policy" data-policy="keep">保持原背景</button><button class="button ghost small-button" data-action="replacement-policy" data-policy="change">替换背景</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="button secondary" data-route="generate">打开生成中心</button><button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>按模板生成替换镜头</button></div></section>
+        <section class="card card-pad"><div class="section-title"><div><h3>替换提示词结构</h3><p>必须写清七项</p></div></div><div class="tag-cloud"><span class="tag">参考视频</span><span class="tag">男女主参考图</span><span class="tag">身份锁定</span><span class="tag">动作保持</span><span class="tag">镜头保持</span><span class="tag">背景保留/替换</span><span class="tag">负向约束</span></div><div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>先出首帧</strong>首帧有串脸、手部错误时先修图，不进入视频生成。</div></div></section>
+      </div>
+      <section class="card card-pad" style="margin-top:18px;"><div class="section-title"><div><h2>已生成视频</h2><p>${videoAssets.length} 个</p></div></div>${renderVideoAssets(videoAssets)}</section>`,
+    10: `
+      <div class="content-grid">
+        <section class="card card-pad"><div class="section-title"><div><h2>BGM 风格试听</h2><p>从第一个画面开始铺底，为人声留出位置</p></div></div><div class="choice-grid" style="grid-template-columns:1fr;"><button class="choice-card active" data-action="music-choice"><span class="choice-symbol">弦</span><h4>东方弦乐 + 轻钢琴</h4><p>舒缓开场，誓言段抬升，最后淡出。</p></button><button class="choice-card" data-action="music-choice"><span class="choice-symbol">琴</span><h4>温暖钢琴 + 氛围垫</h4><p>适合照片和旁白较多的版本。</p></button></div><button class="button primary" style="width:100%;margin-top:14px;" data-action="generate-music">生成候选 BGM</button></section>
+        <section class="card card-pad"><div class="section-title"><div><h3>音乐候选</h3><p>${musicAssets.length} 条</p></div></div>${renderAudioAssets(musicAssets)}</section>
+      </div>`,
+    11: `
+      <div class="content-grid"><section class="card card-pad"><div class="section-title"><div><h2>代表性声音试混</h2><p>检查配音与 BGM 是否互相遮挡</p></div></div><div class="checklist"><div class="check-item"><span class="check-icon pending">1</span><div class="check-copy"><strong>旁白清楚</strong><small>字幕辅音不被鼓点遮住</small></div></div><div class="check-item"><span class="check-icon pending">2</span><div class="check-copy"><strong>音乐有抬升</strong><small>高潮段有变化但不过响</small></div></div><div class="check-item"><span class="check-icon pending">3</span><div class="check-copy"><strong>结尾收干净</strong><small>音乐随片尾落幅淡出</small></div></div></div></section><section class="card card-pad"><div class="section-title"><div><h3>当前声音资产</h3></div></div><p class="small">旁白 ${voiceAssets.length} 条 · 音乐 ${musicAssets.length} 条</p>${renderAudioAssets([...voiceAssets.slice(0,2),...musicAssets.slice(0,2)])}</section></div>`,
+    12: `
+      <div class="content-grid"><section class="card card-pad"><div class="section-title"><div><h2>完整混音</h2><p>目标和：旁白清楚、音乐 -14 LUFS、结尾自然</p></div></div><div class="checklist"><div class="check-item"><span class="check-icon pending">1</span><div class="check-copy"><strong>全长试听</strong><small>不能只确认 10 秒小样</small></div></div><div class="check-item"><span class="check-icon pending">2</span><div class="check-copy"><strong>响度检查</strong><small>FFmpeg loudnorm → -14 LUFS</small></div></div></div></section><section class="card card-pad"><div class="section-title"><div><h3>生成带声音样片</h3><p>在导出页合成后检查</p></div></div><button class="button primary" data-route="export">进入合成导出</button></section></div>`,
+    13: `
+      <div class="content-grid"><section class="card card-pad"><div class="section-title"><div><h2>字幕与预览</h2><p>微软雅黑 24pt，白字深色描边，底部安全区</p></div></div><textarea class="textarea" data-speech-text style="min-height:130px;">沈知远与林晚晴，从雨天借伞开始，一起走过旅行、搬家和异地岁月。今天，他们把余生写成同一个故事。</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button secondary" data-action="generate-subtitles">生成 SRT</button><button class="button primary" data-route="export">合成带字幕成片</button></div></section><section class="card card-pad"><div class="section-title"><div><h3>最近成片</h3><p>预览画面和字幕</p></div></div>${renderVideoAssets(exports.slice(0,2))}</section></div>`,
+    14: `
+      <section class="card card-pad"><div class="section-title"><div><h2>正式交付</h2><p>成片、SRT、可编辑工程和检查记录</p></div><span class="badge ${exports.length ? "green" : "gray"}">${exports.length} 个成片</span></div><div class="feature-grid"><article class="feature-card"><div class="feature-icon">影</div><h4>MP4 成片</h4><p>H.264 + AAC，24 FPS。</p><button class="button secondary small-button" data-route="export" style="margin-top:12px;">查看成片</button></article><article class="feature-card"><div class="feature-icon">字</div><h4>SRT 字幕</h4><p>可编辑字幕并嵌入成片。</p></article><article class="feature-card"><div class="feature-icon">程</div><h4>可编辑工程</h4><p>FFmpeg 时间线 JSON 和 VVV Remotion 工程。</p><button class="button secondary small-button" data-route="export" style="margin-top:12px;">导出设置</button></article></div>${renderVideoAssets(exports.slice(0,3))}</section>`
+  };
+  return raw[number] || "";
+}
+
+function workflowMaterialSummary() {
+  const items = [
+    ["男女主照片", Boolean(state.photoSources?.groom && state.photoSources?.bride)],
+    ["五幕故事", ["origin","knowing","confirm","companionship","promise"].every((key) => String(state.storyBeats?.[key] || "").trim())],
+    ["模板或参考片", runtime.templates.length > 0],
+    ["旁白", runtime.assets.some((asset) => asset.kind === "voice")],
+    ["音乐", runtime.assets.some((asset) => asset.kind === "music")],
+    ["字幕", runtime.assets.some((asset) => asset.kind === "subtitle")]
+  ];
+  return `<section class="card card-pad"><div class="section-title"><div><h3>素材检查</h3><p>没有素材就不开始生成</p></div><button class="text-button" data-route="assets">打开素材中心 →</button></div><div class="checklist">${items.map(([label,done])=>`<div class="check-item"><span class="check-icon ${done?"":"pending"}">${done?"✓":"!"}</span><div class="check-copy"><strong>${label}</strong><small>${done?"已就绪":"尚缺"}</small></div></div>`).join("")}</div></section>`;
+}
+
+function renderAudioAssets(items) {
+  if (!items.length) return '<p class="small muted">暂无音频资产。</p>';
+  return `<div class="stack" style="gap:8px;">${items.map((asset)=>`<div class="prompt-block"><label>${esc(asset.title || materialLabel(asset.kind))}</label>${asset.url?`<audio controls preload="metadata" src="${esc(api.mediaUrl(asset.url))}" style="width:100%;"></audio>`:'<p class="small muted">旧资产无在线地址</p>'}</div>`).join("")}</div>`;
+}
+
+function renderImageAssets(items) {
+  if (!items.length) return '<div class="empty-state" style="min-height:180px;"><div><div class="empty-state-symbol">图</div><h3>还没有图片</h3><p>上传或生成后会显示在这里。</p></div></div>';
+  return `<div class="asset-grid">${items.map((asset)=>`<article class="asset-card card"><div class="asset-preview">${asset.url?`<img src="${esc(api.mediaUrl(asset.url))}" alt="${esc(asset.title)}" />`:'图'}</div><div class="asset-info"><strong>${esc(asset.title)}</strong><small>${esc(asset.kind)}</small></div></article>`).join("")}</div>`;
+}
+
+function renderVideoAssets(items) {
+  if (!items.length) return '<div class="empty-state" style="min-height:180px;"><div><div class="empty-state-symbol">影</div><h3>还没有视频</h3><p>完成镜头或成片后会显示在这里。</p></div></div>';
+  return `<div class="asset-grid">${items.map((asset)=>`<article class="asset-card card"><div class="asset-preview"><video src="${esc(api.mediaUrl(asset.url))}" controls preload="metadata"></video></div><div class="asset-info"><strong>${esc(asset.title)}</strong><small>${Number(asset.media?.duration || 0).toFixed(1)} 秒 · ${esc(asset.kind)}</small></div></article>`).join("")}</div>`;
 }
 
 function templatesPage() {
@@ -1949,6 +2219,11 @@ function methodPage() {
             <div class="source-fact"><strong>${referenceTemplate ? Math.round(referenceTemplate.duration * 24).toLocaleString("zh-CN") : "—"}</strong><small>分析帧数 / 24 FPS</small></div>
             <div class="source-fact"><strong>${referenceTemplate?.recipe?.shots?.length || "—"}</strong><small>候选镜头配方</small></div>
           </div>
+          ${
+            referenceTemplate?.contactSheetUrls?.length
+              ? `<section class="card card-pad"><div class="section-title"><div><h2>逐帧视图</h2><p>每 5 秒取帧，一张联系表覆盖约 80 秒</p></div></div><div class="stack" style="gap:10px;">${referenceTemplate.contactSheetUrls.map((url, index) => `<img src="${esc(api.mediaUrl(url))}" alt="逐帧视图 ${index + 1}" style="width:100%;border-radius:10px;border:1px solid var(--line);" />`).join("")}</div></section>`
+              : ""
+          }
           <section class="card card-pad">
             <div class="section-title"><div><h2>原视频文案</h2><p>已从页面信息与画面字幕中提取</p></div><span class="badge gold">阿泽AI</span></div>
             <p class="small" style="line-height:1.8;color:var(--ink-soft);margin:0;">“AI 婚礼微电影，拿出 AI 婚礼微电影 skill 教程，只为让你学个明白。”<br />视频把整个过程压缩成：定创意、定人物、定场景、写分镜、生成、剪辑六步。</p>
@@ -1982,6 +2257,34 @@ function methodPage() {
           ).join("")}
         </div>
         <div class="notice" style="margin-top:14px;">${icon("sparkle")}<div><strong>逐帧文件已生成</strong>24 FPS 重采样文件、关键帧联系表与时间码清单保存在工作区的 <code>output/douyin-wedding-ai</code> 目录，方便你继续核对每一帧。</div></div>
+      </section>
+      <section class="card card-pad timeline-analysis">
+        <div class="section-title">
+          <div><h2>提示词、音乐、字幕与人物替换专项结论</h2><p>基于 113 段 OCR 字幕、43 段口播、逐帧清单和最终回放音轨</p></div>
+          <a class="button secondary small-button" href="./docs/抖音参考片专项分析.md" target="_blank">查看完整分析</a>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <div class="feature-icon">词</div>
+            <h4>提示词格式</h4>
+            <p>素材映射 → 画幅时长 → 首帧 → 场景光线 → 站位视线 → 起始动作 → 过程 → 结束姿态 → 机位运镜 → 连续性 → 切点 → 声音 → 负向约束。</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">乐</div>
+            <h4>音乐配置</h4>
+            <p>约 01:58.8 进入 BGM，final 回放从第一格即有音乐；估算约 69 BPM。前段轻、6 秒后抬升、结尾淡出。</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">字</div>
+            <h4>字幕与字体</h4>
+            <p>成片抽样未见烧录字幕；教程平台字幕是粗体无衬线、白字配黄色强调。精确字体名无法从像素确认。项目默认微软雅黑 24pt、白字深描边。</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">换</div>
+            <h4>真人替换</h4>
+            <p>切 4–8 秒单镜 → 首帧定妆 → reference_video + 男女主 reference_image → 保持动作/机位/背景透视 → 逐镜检查脸和手。</p>
+          </article>
+        </div>
       </section>
     </div>
   `;
@@ -2278,6 +2581,28 @@ async function handleAction(button) {
       ].join("\n")
     );
   }
+  if (action === "copy-script-confirmation") {
+    await copyText(
+      [
+        `请确认婚礼微电影文案：${state.groom} × ${state.bride}`,
+        treatment.logline,
+        ...treatment.acts.map(
+          (act, index) => `${index + 1}. ${act.label}：${act.summary}`
+        ),
+        "请明确回复：此版本文案可以，或指出需要修改的事实与句子。"
+      ].join("\n")
+    );
+  }
+  if (action === "replacement-policy") {
+    const policy = button.dataset.policy;
+    const textarea = document.querySelector("[data-video-prompt]");
+    if (!textarea) return;
+    textarea.value =
+      policy === "change"
+        ? `保持参考视频中${state.groom}和${state.bride}的人物动作、机位、镜头运动、人物占画面比例和切点不变。将背景替换为${state.city || "现代"}婚礼庭院。新背景的地平线、主光方向、色温和阴影必须与原人物动作匹配；保留脚底接触阴影、手部接触关系、服装边缘和头发轮廓。不要改变人物身份和动作，不要产生漂浮、抠图边、遮挡错误或空间方向反转。`
+        : `保持参考视频的构图、景别、机位、人物动作、镜头运动和剪辑节奏。男主角替换为参考图中的${state.groom}，女主角替换为参考图中的${state.bride}。严格保持两人的脸型、五官比例、发际线、发型、肤色和身高差。保持原视频背景的建筑、道具、空间透视、光线方向和色调。不要改变镜头轴线和切点位置，不要出现文字、水印、面部漂移、服装跳变或肢体粘连。`;
+    showToast(policy === "change" ? "已切换为可替换背景提示词" : "已切换为保持背景提示词");
+  }
   if (action === "refresh-runtime") {
     await refreshRuntime();
     showToast("本地项目与任务已刷新");
@@ -2568,13 +2893,36 @@ async function handleAction(button) {
       audio.play().catch(() => {});
     }
   }
+  if (action === "audition-voice") {
+    const text = document.querySelector("[data-speech-text]")?.value.trim();
+    if (!text) {
+      showToast("请先输入试听文案");
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "生成试听中…";
+    const result = await api.generateVoice({
+      projectId: currentProjectId,
+      text,
+      modelId: button.dataset.modelId,
+      title: "音色试听"
+    });
+    await refreshRuntime();
+    showToast("音色试听已生成");
+    const audio = document.querySelector("[data-audio-preview]");
+    if (audio && result.url) {
+      audio.src = api.mediaUrl(result.url);
+      audio.hidden = false;
+      audio.play().catch(() => {});
+    }
+  }
   if (action === "generate-music") {
     button.disabled = true;
     button.textContent = "正在编排原创配乐…";
     const result = await api.generateMusic({
       projectId: currentProjectId,
       duration: state.duration,
-      mood: "warm-cinematic",
+      mood: selectedMusicMood,
       title: `${state.projectName} · 原创配乐`
     });
     await refreshRuntime();
@@ -2695,6 +3043,7 @@ async function handleAction(button) {
   if (action === "music-choice") {
     document.querySelectorAll("[data-action='music-choice']").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
+    selectedMusicMood = button.textContent.includes("温暖钢琴") ? "bright-romantic" : "warm-cinematic";
     showToast("配乐方向已切换");
   }
   if (action === "reset-project") {

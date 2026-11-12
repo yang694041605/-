@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { runProcess } from "./ark.mjs";
@@ -70,6 +70,25 @@ export async function extractVideoSegment(videoPath, outputPath, start = 0, dura
     outputPath
   ]);
   return outputPath;
+}
+
+export async function extractContactSheets(videoPath, outputDir) {
+  await mkdir(outputDir, { recursive: true });
+  const pattern = join(outputDir, "contact-%02d.jpg");
+  await runProcess(FFMPEG, [
+    "-y",
+    "-i",
+    videoPath,
+    "-vf",
+    "fps=1/5,scale=480:-1,tile=4x4",
+    "-q:v",
+    "4",
+    pattern
+  ]);
+  const files = (await readdir(outputDir))
+    .filter((name) => /^contact-\d+\.jpg$/.test(name))
+    .sort();
+  return files.map((name) => join(outputDir, name));
 }
 
 export async function detectSceneCuts(videoPath, threshold = 0.32) {
@@ -226,7 +245,7 @@ export async function renderTimeline({
 
     if (subtitlePath) {
       const escaped = subtitlePath.replaceAll("\\", "/").replaceAll(":", "\\:");
-      const videoFilter = `subtitles='${escaped}'`;
+      const videoFilter = `subtitles='${escaped}':force_style='FontName=Microsoft YaHei,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00101010,BorderStyle=1,Outline=2,Shadow=0,MarginV=30,Alignment=2'`;
       const currentMapIndex = args.indexOf("0:v:0");
       if (currentMapIndex >= 0) {
         args.splice(currentMapIndex, 2);

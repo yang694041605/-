@@ -50,6 +50,8 @@ arkcli auth login volc-sso
 
 每次只推进一个确认步骤。素材不满足时按钮不会放行，确认时间和版本会随项目保存。
 
+主导航已经收敛为 14 个独立步骤路由，不再让一个步骤的多个标签重复指向同一页面。
+
 ## 素材中心
 
 素材中心集中管理婚礼照片、故事采集卡、服装参考、场景参考、视频、音乐、旁白、字幕、成片和可编辑工程。故事采集卡位于 [`public/story-intake.html`](public/story-intake.html)。
@@ -79,6 +81,8 @@ npm run build
 - `ffmpeg-skill`：42 个本地媒体工具与交付检查。
 
 详细核验结果见 [开源技能整合说明](docs/开源技能整合说明.md)。
+
+抖音参考片的提示词格式、BGM 起点、字幕字体判断和真人替换方法见 [抖音参考片专项分析](docs/抖音参考片专项分析.md)。
 
 第三方来源与许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
