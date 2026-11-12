@@ -1,0 +1,17 @@
+node_modules/
+dist/
+data/
+.env
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+output/
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png

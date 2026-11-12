@@ -1,0 +1,16 @@
+{
+  "name": "xying-wedding-film-studio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "囍映 AI 婚礼微电影创作台 - 桌面/网页预览版",
+  "scripts": {
+    "start": "node server/index.mjs",
+    "start:static": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}
