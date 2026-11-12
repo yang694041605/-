@@ -42,6 +42,15 @@ import {
   generatePollinationsText
 } from "./pollinations.mjs";
 import { checkVvv, createVvvProject, findVvvRoot } from "./vvv.mjs";
+import {
+  approvalSnapshot,
+  approveStep,
+  buildProjectTimeline,
+  rejectFilesystemPathKeys,
+  sha256File,
+  sha256Text,
+  validateRenderTimeline
+} from "./production.mjs";
 
 seedDefaults();
 
@@ -49,6 +58,17 @@ const port = Number(process.env.PORT || 4173);
 const host = "127.0.0.1";
 const maxJsonBody = 12 * 1024 * 1024;
 const resumeTimers = new Set();
+const allowedOrigins = new Set(
+  [
+    `http://${host}:${port}`,
+    `http://localhost:${port}`,
+    `http://[::1]:${port}`,
+    ...(process.env.XYING_ALLOWED_ORIGINS || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  ]
+);
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -73,6 +93,15 @@ const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host || host}`);
     if (url.pathname.startsWith("/api/")) {
+      const origin = request.headers.origin || "";
+      if (origin && !allowedOrigins.has(origin)) {
+        sendJson(response, 403, {
+          ok: false,
+          error: "拒绝来自未授权页面的本地服务请求"
+        });
+        return;
+      }
+      setCors(response, origin);
       await handleApi(request, response, url);
       return;
     }
@@ -99,7 +128,6 @@ resumeVideoJobs();
 async function handleApi(request, response, url) {
   const method = request.method || "GET";
   const path = url.pathname;
-  setCors(response);
   if (method === "OPTIONS") {
     response.writeHead(204);
     response.end();
@@ -161,6 +189,109 @@ async function handleApi(request, response, url) {
     return project
       ? sendJson(response, 200, { ok: true, item: project })
       : sendJson(response, 404, { ok: false, error: "项目不存在" });
+  }
+
+  const projectTimelineMatch = path.match(/^\/api\/projects\/([^/]+)\/timeline$/);
+  if (projectTimelineMatch && method === "GET") {
+    const project = getEntity("project", projectTimelineMatch[1]);
+    if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const assets = projectAssets(project.id);
+    const timeline = buildProjectTimeline(
+      project,
+      assets,
+      Number(project.timelineRevision) || 1
+    );
+    return sendJson(response, 200, {
+      ok: true,
+      item: timeline,
+      approvalSnapshot: approvalSnapshot(project, assets, {
+        mode: project.mode || "story",
+        step: Number(project.workflow?.currentStep || 1)
+      })
+    });
+  }
+
+  const projectApproveMatch = path.match(
+    /^\/api\/projects\/([^/]+)\/workflow\/approve$/
+  );
+  if (projectApproveMatch && method === "POST") {
+    const project = getEntity("project", projectApproveMatch[1]);
+    if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const body = await readJson(request);
+    const mode = body.mode === "remix" ? "remix" : "story";
+    const step = Number(body.step);
+    const maximum = mode === "remix" ? 4 : 14;
+    if (!Number.isInteger(step) || step < 1 || step > maximum) {
+      return sendJson(response, 400, { ok: false, error: "确认步骤无效" });
+    }
+    if (body.confirmText !== "确认当前版本") {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "请明确输入“确认当前版本”后提交确认"
+      });
+    }
+    const assets = projectAssets(project.id);
+    const snapshot = approvalSnapshot(project, assets, { mode, step });
+    const workflow = approveStep(project, {
+      mode,
+      step,
+      snapshot,
+      evidence: body.evidence
+    });
+    const updated = updateEntity("project", project.id, {
+      workflow,
+      mode,
+      lastApprovalAt: new Date().toISOString()
+    });
+    return sendJson(response, 200, {
+      ok: true,
+      item: updated,
+      approval: workflow.approvals[step]
+    });
+  }
+
+  const projectShotMatch = path.match(
+    /^\/api\/projects\/([^/]+)\/shots\/([^/]+)$/
+  );
+  if (projectShotMatch && method === "PUT") {
+    const project = getEntity("project", projectShotMatch[1]);
+    if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const body = await readJson(request);
+    const shotId = decodeURIComponent(projectShotMatch[2]);
+    const index = (project.storyboard || []).findIndex((shot) => shot.id === shotId);
+    if (index < 0) return sendJson(response, 404, { ok: false, error: "镜头不存在" });
+    const current = project.storyboard[index];
+    const patch = {};
+    for (const key of ["status", "assets", "characters", "source", "review", "prompt"]) {
+      if (body[key] !== undefined) patch[key] = body[key];
+    }
+    if (body.prompt !== undefined) {
+      const text = String(body.prompt || "");
+      patch.prompt = text;
+      patch.promptVersion = {
+        version: Number(current.promptVersion?.version || 1) + 1,
+        hash: sha256Text(text),
+        text
+      };
+    } else if (body.promptVersion?.text !== undefined) {
+      const text = String(body.promptVersion.text || "");
+      patch.promptVersion = {
+        version: Number(current.promptVersion?.version || 1) + 1,
+        hash: sha256Text(text),
+        text
+      };
+    }
+    const storyboard = project.storyboard.slice();
+    storyboard[index] = { ...current, ...patch };
+    const updated = updateEntity("project", project.id, {
+      storyboard,
+      timelineRevision: Number(project.timelineRevision || 1) + 1
+    });
+    return sendJson(response, 200, {
+      ok: true,
+      item: storyboard[index],
+      project: updated
+    });
   }
 
   const projectPhotoMatch = path.match(/^\/api\/projects\/([^/]+)\/photos$/);
@@ -304,6 +435,11 @@ async function handleApi(request, response, url) {
   const lookGenerateMatch = path.match(/^\/api\/looks\/([^/]+)\/generate$/);
   if (lookGenerateMatch && method === "POST") {
     const body = await readJson(request).catch(() => ({}));
+    try {
+      rejectFilesystemPathKeys(body);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
     const look = getEntity("look", lookGenerateMatch[1]);
     if (!look) return sendJson(response, 404, { ok: false, error: "造型不存在" });
     const job = createJob("look-image", {
@@ -370,6 +506,11 @@ async function handleApi(request, response, url) {
 
   if (path === "/api/generate/image" && method === "POST") {
     const body = await readJson(request);
+    try {
+      rejectFilesystemPathKeys(body);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
     const job = createJob("image-generation", {
       modelId: body.modelId || "",
       projectId: body.projectId || "",
@@ -386,6 +527,11 @@ async function handleApi(request, response, url) {
 
   if (path === "/api/generate/video" && method === "POST") {
     const body = await readJson(request);
+    try {
+      rejectFilesystemPathKeys(body);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
     const job = createJob("video-generation", {
       modelId: body.modelId || "",
       projectId: body.projectId || "",
@@ -479,6 +625,11 @@ async function handleApi(request, response, url) {
 
   if (path === "/api/render" && method === "POST") {
     const body = await readJson(request);
+    try {
+      rejectFilesystemPathKeys(body);
+    } catch (error) {
+      return sendJson(response, 400, { ok: false, error: safeError(error) });
+    }
     const job = createJob("render", {
       projectId: body.projectId || "",
       input: body
@@ -609,6 +760,12 @@ async function readJson(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+function projectAssets(projectId) {
+  return listEntities("asset", 2000).filter(
+    (asset) => asset.projectId === projectId || asset.ownerId === projectId
+  );
+}
+
 async function receiveUpload(request, { kind, ownerId = "", preferredName = "upload" }) {
   const assetId = id("asset");
   const extension = inferExtension(request.headers["content-type"], preferredName);
@@ -630,6 +787,8 @@ async function receiveUpload(request, { kind, ownerId = "", preferredName = "upl
     url: mediaUrlForPath(localPath),
     mimeType: request.headers["content-type"] || "",
     size: (await stat(localPath)).size,
+    contentHash: await sha256File(localPath),
+    version: 1,
     media
   });
   return asset;
@@ -1341,7 +1500,6 @@ function safeError(error) {
 
 function sendJson(response, statusCode, payload) {
   const body = Buffer.from(JSON.stringify(payload));
-  setCors(response);
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": body.length,
@@ -1350,11 +1508,14 @@ function sendJson(response, statusCode, payload) {
   response.end(body);
 }
 
-function setCors(response) {
-  response.setHeader("Access-Control-Allow-Origin", "*");
+function setCors(response, origin = "") {
+  if (origin && allowedOrigins.has(origin)) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+  }
   response.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, X-File-Name"
+    "Content-Type, X-File-Name, X-Xying-Token"
   );
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
 }

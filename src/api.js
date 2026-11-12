@@ -35,6 +35,21 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(patch)
     }),
+  getProjectTimeline: (projectId) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/timeline`),
+  approveProjectStep: (projectId, payload) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/workflow/approve`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateShot: (projectId, shotId, patch) =>
+    request(
+      `/api/projects/${encodeURIComponent(projectId)}/shots/${encodeURIComponent(shotId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(patch)
+      }
+    ),
   createProject: (project) =>
     request("/api/projects", {
       method: "POST",
