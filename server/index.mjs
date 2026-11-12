@@ -1613,32 +1613,34 @@ async function analyzeRemixTemplate(templateId, jobId) {
   updateJob(jobId, {
     status: "running",
     progress: 15,
-    log: "正在转写原声音并生成字幕时间轴"
+    log: "正在本地转写原声音并生成字幕时间轴"
   });
   try {
-    const vision = getModelOrDefault("", "vision");
-    const result = await understandMedia({
-      profile: vision?.profile || "",
-      model: vision?.model || "",
-      subSkill: "asr-align",
-      inputPath: template.remixExtraction.audioPath,
-      parameters: { maxOutputTokens: 8000, temperature: 0.1, timeout: "2m" }
+    const result = await transcribeWithWhisper(template.videoPath, analysisDir);
+    transcript = result.transcript || [];
+    updateJob(jobId, {
+      status: "running",
+      progress: 35,
+      log: `已转写 ${transcript.length} 段原声音`
     });
-    transcriptSrt = String(result.content || "");
-    transcript = transcriptSrt
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !/^\d+$/.test(line) && !line.includes("-->"))
-      .map((text) => ({ text }));
-  } catch (arkError) {
+  } catch (whisperError) {
     try {
-      const result = await transcribeWithWhisper(template.videoPath, analysisDir);
-      transcript = result.transcript || [];
-      transcriptError = arkError.message
-        ? `Ark 字幕对齐失败，已使用 Whisper 兜底：${safeError(arkError)}`
-        : "";
-    } catch (whisperError) {
-      transcriptError = `Ark 与 Whisper 转写均失败：${safeError(arkError)}；${safeError(whisperError)}`;
+      const vision = getModelOrDefault("", "vision");
+      const result = await understandMedia({
+        profile: vision?.profile || "",
+        model: vision?.model || "",
+        subSkill: "asr-align",
+        inputPath: template.remixExtraction.audioPath,
+        parameters: { maxOutputTokens: 8000, temperature: 0.1, timeout: "2m" }
+      });
+      transcriptSrt = String(result.content || "");
+      transcript = transcriptSrt
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !/^\d+$/.test(line) && !line.includes("-->"))
+        .map((text) => ({ text }));
+    } catch (arkError) {
+      transcriptError = `Whisper 与 Ark 转写均失败：${safeError(whisperError)}；${safeError(arkError)}`;
     }
   }
   if (!transcriptSrt.trim() && transcript.length) {
