@@ -10,7 +10,7 @@ test("技术检查通过不等于人工审核通过", () => {
   const technical = evaluateTechnicalQc({
     media: {
       duration: 40,
-      video: { width: 1280, height: 720, avg_frame_rate: "24/1" },
+      video: { width: 1280, height: 720, avg_frame_rate: "24/1", nb_frames: "960" },
       audio: { codec_type: "audio" }
     },
     expectedDuration: 40,

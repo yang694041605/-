@@ -3138,6 +3138,45 @@ input[type="range"] {
   }
 }
 
+/* Production readability baseline: every interface level stays readable. */
+body {
+  font-size: 17px;
+}
+
+button,
+input,
+select,
+textarea,
+.button,
+.nav-label,
+.nav-node,
+.field label,
+.field-label,
+.check-copy strong,
+.check-copy small,
+.generation-copy strong,
+.generation-copy small,
+.asset-info strong,
+.asset-info small,
+.prompt-card p,
+.section-title p,
+.field-hint,
+.small,
+small {
+  font-size: max(14px, 0.875rem);
+  line-height: 1.55;
+}
+
+.eyebrow,
+.page-kicker,
+.badge,
+.chip,
+.generation-meta,
+.summary-meta-item span {
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   buildFrameExtractionPlan,
   buildRemixShotPlan,
-  normalizeReplacementTargets
+  normalizeReplacementTargets,
+  sliceSrt,
+  transcriptToSrt
 } from "../server/remix.mjs";
 
 test("抖音复刻按每秒 24 帧建立完整帧计划", () => {
@@ -69,4 +71,38 @@ test("长参考片会合并成最多八个连续生产镜头", () => {
   assert.equal(shots[0].source.referenceStart, 25);
   assert.equal(shots.at(-1).source.referenceEnd, 65);
   assert.ok(shots.every((shot) => shot.duration <= 9));
+});
+
+test("原字幕按所选参考片区间重新打轴", () => {
+  const source = [
+    "1",
+    "00:02:03,000 --> 00:02:05,000",
+    "前一句",
+    "",
+    "2",
+    "00:02:05,000 --> 00:02:08,000",
+    "后一句",
+    ""
+  ].join("\n");
+  const sliced = sliceSrt(source, 123, 163);
+  assert.match(sliced, /00:00:00,000 --> 00:00:02,000/);
+  assert.match(sliced, /00:00:02,000 --> 00:00:05,000/);
+  assert.match(sliced, /前一句/);
+  assert.match(sliced, /后一句/);
+});
+
+test("Whisper 时间点可以转成十八字安全字幕", () => {
+  const srt = transcriptToSrt([
+    {
+      start: 123,
+      end: 127,
+      text: "沈知远与林晚晴从雨天借伞开始今天他们把余生写成同一个故事"
+    }
+  ]);
+  const textLines = srt
+    .split(/\r?\n/)
+    .filter((line) => line && !/^\d+$/.test(line) && !line.includes("-->"));
+  assert.ok(textLines.length >= 2);
+  assert.ok(textLines.every((line) => line.length <= 18));
+  assert.match(srt, /00:02:03,000 --> /);
 });

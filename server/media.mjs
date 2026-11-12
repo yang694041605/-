@@ -211,6 +211,11 @@ export async function renderTimeline({
     ]);
 
     const audioInputs = [];
+    const expectedFrames = clips.reduce(
+      (sum, clip) => sum + Math.max(1, Math.round(Number(clip.duration || 0) * fps)),
+      0
+    );
+    const targetDuration = (expectedFrames / fps).toFixed(6);
     if (musicPath) {
       audioInputs.push({
         path: musicPath,
@@ -231,11 +236,10 @@ export async function renderTimeline({
 
     if (audioInputs.length > 0) {
       const audioStartIndex = subtitlePath ? 2 : 1;
-      const pictureDuration = await getDuration(silentPath);
       const filter = buildAudioMixFilter({
         audioInputs,
         audioStartIndex,
-        pictureDuration
+        pictureDuration: targetDuration
       });
       args.push(
         "-filter_complex",
@@ -243,12 +247,12 @@ export async function renderTimeline({
         "-map",
         "0:v:0",
         "-map",
-        "[aout]",
-        "-shortest"
+        "[aout]"
       );
     } else {
       args.push("-map", "0:v:0", "-an");
     }
+    args.push("-frames:v", String(expectedFrames), "-t", targetDuration);
 
     if (subtitlePath) {
       const escaped = subtitlePath.replaceAll("\\", "/").replaceAll(":", "\\:");
@@ -367,6 +371,9 @@ export function evaluateTechnicalQc({
     frameRate: Number(String(media?.video?.avg_frame_rate || "0/1").split("/")[0]) === Number(fps),
     duration:
       Math.abs(Number(media?.duration || 0) - Number(expectedDuration || 0)) <= 0.08,
+    frameCount:
+      Number(media?.video?.nb_frames || 0) ===
+      Math.round(Number(expectedDuration || 0) * Number(fps || 24)),
     resolution:
       Number(media?.video?.width || 0) === Number(width) &&
       Number(media?.video?.height || 0) === Number(height),

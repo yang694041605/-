@@ -108,7 +108,8 @@ function selectedAudioTrack(project, assets, kind, explicitId) {
       assetId: selected.id,
       hash: selected.contentHash || selected.sha256 || "",
       start: 0,
-      end: Number(project.duration || 0)
+      end: Number(project.duration || 0),
+      sourceStart: Number(selected.sourceStart || 0)
     }
   ];
 }
@@ -157,7 +158,7 @@ export function approvalSnapshot(project, assets, { mode, step }) {
   const promptVersions = Object.fromEntries(
     (project.storyboard || []).map((shot) => [
       shot.id,
-      Number(shot.promptVersion?.version || 1)
+      `${Number(shot.promptVersion?.version || 1)}:${shot.promptVersion?.hash || sha256Text(String(shot.prompt || ""))}`
     ])
   );
   const payload = {

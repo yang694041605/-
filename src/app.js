@@ -1296,7 +1296,7 @@ function remixStepContent(number) {
         <button class="button primary" style="margin-top:14px;" data-action="save-remix-targets" data-template-id="${template?.id || ""}" ${analysis ? "" : "disabled"}>${icon("shield")}保存人物目标与复刻区间</button>
       </section>
       <section class="card card-pad"><div class="section-title"><div><h2>逐镜人物替换</h2><p>每个镜头使用自己的模板区间和提示词版本</p></div></div>
-        ${selected ? `<div class="project-brief"><div class="field"><label>当前镜头</label><select class="select" data-shot-select>${remixShots.map((shot) => `<option value="${shot.id}" ${shot.id === selected.id ? "selected" : ""}>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒 · ${shot.status}</option>`).join("")}</select></div><div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div></div><textarea class="textarea" data-video-prompt style="min-height:190px;margin-top:12px;">${esc(buildReplacementPrompt(selected))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button ghost small-button" data-action="build-replacement-prompt">重新生成提示词</button><button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>提交当前镜头替换</button></div>` : '<p class="small muted">请先保存人物目标与复刻区间，系统会建立最多 8 个连续镜头。</p>'}
+        ${selected ? `<div class="project-brief"><div class="field"><label>当前镜头</label><select class="select" data-shot-select>${remixShots.map((shot) => `<option value="${shot.id}" ${shot.id === selected.id ? "selected" : ""}>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒 · ${shot.status}</option>`).join("")}</select></div><div class="field"><label>本镜男主目标</label><select class="select" data-shot-groom-target>${targetOptions(selected.characters?.groom?.target || "left")}</select></div><div class="field"><label>本镜女主目标</label><select class="select" data-shot-bride-target>${targetOptions(selected.characters?.bride?.target || "right")}</select></div><div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div></div><textarea class="textarea" data-video-prompt style="min-height:190px;margin-top:12px;">${esc(buildReplacementPrompt(selected))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button ghost small-button" data-action="build-replacement-prompt">重新生成提示词</button><button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>提交当前镜头替换</button></div>` : '<p class="small muted">请先保存人物目标与复刻区间，系统会建立最多 8 个连续镜头。</p>'}
       </section>
       ${selected ? `<section class="card card-pad"><div class="section-title"><div><h2>镜头 ${String(selected.order).padStart(2, "0")} 人工质检</h2><p>技术生成成功不等于人工审核通过</p></div><span class="badge ${shotReviewComplete(review) ? "green" : "gray"}">${shotReviewComplete(review) ? "已通过" : "待复核"}</span></div><div class="checklist">${qcItems.map(([key, label]) => `<label class="check-item"><input type="checkbox" data-qc-check="${key}" ${review[key] === "passed" ? "checked" : ""} /><div class="check-copy"><strong>${label}</strong><small>${review[key] === "passed" ? "已通过" : "请实际观看后确认"}</small></div></label>`).join("")}</div><button class="button primary" style="width:100%;margin-top:14px;" data-action="save-shot-qc" data-mode="remix" data-shot-id="${selected.id}">保存本镜人工审核</button></section>` : ""}
     </div>`;
@@ -3328,6 +3328,18 @@ async function handleAction(button) {
       showToast("请先建立故事分镜");
       return;
     }
+    const groomTarget =
+      document.querySelector("[data-shot-groom-target]")?.value ||
+      selectedShot.characters?.groom?.target ||
+      "left";
+    const brideTarget =
+      document.querySelector("[data-shot-bride-target]")?.value ||
+      selectedShot.characters?.bride?.target ||
+      "right";
+    if (groomTarget === brideTarget) {
+      showToast("当前镜头的男女主替换目标不能相同");
+      return;
+    }
     let referenceWindow;
     try {
       referenceWindow = shotReferenceWindow(selectedShot, 8);
@@ -3366,11 +3378,11 @@ async function handleAction(button) {
       characters: {
         groom: {
           referenceAssetId: photoAssetIds.groom,
-          target: selectedShot.characters?.groom?.target || "男主角"
+          target: groomTarget
         },
         bride: {
           referenceAssetId: photoAssetIds.bride,
-          target: selectedShot.characters?.bride?.target || "女主角"
+          target: brideTarget
         }
       }
     });

@@ -62,7 +62,7 @@ test("技术质检独立检查帧率、时长、黑边和字幕安全", () => {
   const result = evaluateTechnicalQc({
     media: {
       duration: 40,
-      video: { width: 1280, height: 720, avg_frame_rate: "24/1" },
+      video: { width: 1280, height: 720, avg_frame_rate: "24/1", nb_frames: "960" },
       audio: { codec_type: "audio" }
     },
     expectedDuration: 40,
@@ -79,7 +79,7 @@ test("技术质检独立检查帧率、时长、黑边和字幕安全", () => {
   const failed = evaluateTechnicalQc({
     media: {
       duration: 39,
-      video: { width: 1280, height: 720, avg_frame_rate: "30/1" },
+      video: { width: 1280, height: 720, avg_frame_rate: "30/1", nb_frames: "1170" },
       audio: null
     },
     expectedDuration: 40,

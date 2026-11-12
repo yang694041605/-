@@ -21,7 +21,8 @@ import {
   generateImage,
   queryVideoTask,
   runProcess,
-  submitVideo
+  submitVideo,
+  understandMedia
 } from "./ark.mjs";
 import {
   detectSceneCuts,
@@ -56,6 +57,7 @@ import {
 } from "./production.mjs";
 import {
   approvalIsCurrent,
+  shotReviewComplete,
   splitSubtitleText
 } from "../src/production-model.mjs";
 import {
@@ -63,7 +65,9 @@ import {
   buildRemixShotPlan,
   extractRemixFrames,
   normalizeReplacementTargets,
-  resolveRemixRange
+  resolveRemixRange,
+  sliceSrt,
+  transcriptToSrt
 } from "./remix.mjs";
 
 seedDefaults();
@@ -372,6 +376,29 @@ async function handleApi(request, response, url) {
       mode === "remix"
         ? project.remixWorkflow || { currentStep: 1, approvals: {} }
         : project.workflow || { currentStep: 1, approvals: {} };
+    if (step > Number(workflowBase.currentStep || 1)) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: `不能跳过第 ${workflowBase.currentStep || 1} 步，必须先按顺序确认`
+      });
+    }
+    for (let previousStep = 1; previousStep < step; previousStep += 1) {
+      const previousSnapshot = approvalSnapshot(projectView, assets, {
+        mode,
+        step: previousStep
+      });
+      if (
+        !approvalIsCurrent(
+          workflowBase.approvals?.[previousStep],
+          previousSnapshot
+        )
+      ) {
+        return sendJson(response, 409, {
+          ok: false,
+          error: `第 ${previousStep} 步确认已失效，请按顺序重新确认`
+        });
+      }
+    }
     const workflow = approveStep({ ...project, workflow: workflowBase }, {
       mode,
       step,
@@ -440,6 +467,15 @@ async function handleApi(request, response, url) {
         hash: sha256Text(text),
         text
       };
+    }
+    if (
+      patch.status === "approved" &&
+      !shotReviewComplete(patch.review || current.review || {})
+    ) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "八项人工质检未全部通过，不能把镜头标记为已批准"
+      });
     }
     const storyboard = sourceStoryboard.slice();
     storyboard[index] = { ...current, ...patch };
@@ -512,7 +548,8 @@ async function handleApi(request, response, url) {
           mimeType: "audio/wav",
           contentHash: await sha256File(template.remixExtraction.audioPath).catch(() => ""),
           version: 1,
-          source: "reference-video-audio"
+          source: "reference-video-audio",
+          sourceStart: effectiveRange.start
         },
         `asset-remix-audio-${project.id}`
       );
@@ -520,6 +557,45 @@ async function handleApi(request, response, url) {
         ...(project.timelineSelection || {}),
         musicAssetId: originalAudioAsset.id
       };
+    }
+    if (template.remixAnalysis?.subtitles?.srtPath) {
+      const sourceSrt = await readFile(
+        template.remixAnalysis.subtitles.srtPath,
+        "utf8"
+      ).catch(() => "");
+      const slicedSrt = sliceSrt(
+        sourceSrt,
+        effectiveRange.start,
+        effectiveRange.end
+      );
+      if (slicedSrt.trim()) {
+        const subtitleId = `asset-remix-subtitle-${project.id}`;
+        const subtitlePath = resolve(mediaRoot, "assets", `${subtitleId}.srt`);
+        await writeFile(subtitlePath, slicedSrt, "utf8");
+        const subtitleAsset = saveEntity(
+          "asset",
+          {
+            id: subtitleId,
+            kind: "subtitle",
+            projectId: project.id,
+            ownerId: project.id,
+            templateId: template.id,
+            title: "抖音参考片字幕裁剪版",
+            localPath: subtitlePath,
+            url: mediaUrlForPath(subtitlePath),
+            mimeType: "application/x-subrip",
+            contentHash: await sha256File(subtitlePath),
+            version: 1,
+            source: "reference-video-subtitles",
+            sourceStart: effectiveRange.start
+          },
+          subtitleId
+        );
+        nextProject.timelineSelection = {
+          ...(nextProject.timelineSelection || {}),
+          subtitleAssetId: subtitleAsset.id
+        };
+      }
     }
     const storyboard = buildRemixShotPlan(template, nextProject);
     const updated = updateEntity("project", project.id, {
@@ -764,7 +840,7 @@ async function handleApi(request, response, url) {
           ? resolveGenerationInputs(
               [`reference_image:${body.referenceAssetId}`],
               body.projectId || ""
-            )[0].slice("reference_image:".length)
+            )[0].replace(/^reference_image:@?/, "")
           : ""
       }
     });
@@ -1150,7 +1226,7 @@ function resolveGenerationInputs(inputs, projectId = "") {
       throw new Error("不能引用其他项目的素材");
     }
     const localPath = assertInside(mediaRoot, asset.localPath);
-    return `${role}:${localPath}`;
+    return `${role}:@${localPath}`;
   });
 }
 
@@ -1206,18 +1282,20 @@ function migrateProjectRecords() {
         project.photoAssetIds?.groom ||
         assets.find(
           (asset) =>
-            asset.kind === "photo" &&
-            project.photoSources?.groom &&
-            resolve(asset.localPath) === resolve(project.photoSources.groom)
+            (asset.kind === "photo" || asset.kind === "project-photo") &&
+            ((project.photoSources?.groom &&
+              resolve(asset.localPath) === resolve(project.photoSources.groom)) ||
+              (project.photos?.groom && project.photos.groom.includes(asset.id)))
         )?.id ||
         "",
       bride:
         project.photoAssetIds?.bride ||
         assets.find(
           (asset) =>
-            asset.kind === "photo" &&
-            project.photoSources?.bride &&
-            resolve(asset.localPath) === resolve(project.photoSources.bride)
+            (asset.kind === "photo" || asset.kind === "project-photo") &&
+            ((project.photoSources?.bride &&
+              resolve(asset.localPath) === resolve(project.photoSources.bride)) ||
+              (project.photos?.bride && project.photos.bride.includes(asset.id)))
         )?.id ||
         ""
     };
@@ -1227,6 +1305,8 @@ function migrateProjectRecords() {
       !project.mode ||
       !project.timelineRevision ||
       !project.photoAssetIds ||
+      Boolean(project.photos?.groom && !project.photoAssetIds?.groom) ||
+      Boolean(project.photos?.bride && !project.photoAssetIds?.bride) ||
       !project.storyDuration ||
       project.storyStoryboard == null ||
       project.remixStoryboard == null ||
@@ -1359,11 +1439,17 @@ async function analyzeTemplate(templateId, jobId, deep = false) {
       "镜头必须覆盖完整视频，时间以秒为单位，不要编造看不到的内容。"
     ].join("\n");
     try {
-      const result = await chatText({
+      updateJob(jobId, {
+        status: "running",
+        progress: 35,
+        log: "视频理解模型正在分析画面、声音和镜头"
+      });
+      const result = await understandMedia({
         profile: vision.profile,
         model: vision.model,
-        prompt: "",
-        instructions: prompt,
+        subSkill: "video-summary",
+        inputPath: template.videoPath,
+        prompt,
         parameters: { maxOutputTokens: 6000, temperature: 0.2 }
       });
       aiAnalysis = parseModelJson(result.content);
@@ -1459,13 +1545,47 @@ async function analyzeRemixTemplate(templateId, jobId) {
   const analysisDir = resolve(mediaRoot, "templates", template.id, "remix-analysis");
   await mkdir(analysisDir, { recursive: true });
   let transcript = [];
+  let transcriptSrt = "";
   let transcriptError = "";
+  updateJob(jobId, {
+    status: "running",
+    progress: 15,
+    log: "正在转写原声音并生成字幕时间轴"
+  });
   try {
-    const result = await transcribeWithWhisper(template.videoPath, analysisDir);
-    transcript = result.transcript || [];
-  } catch (error) {
-    transcriptError = safeError(error);
+    const vision = getModelOrDefault("", "vision");
+    const result = await understandMedia({
+      profile: vision?.profile || "",
+      model: vision?.model || "",
+      subSkill: "asr-align",
+      inputPath: template.remixExtraction.audioPath,
+      parameters: { maxOutputTokens: 8000, temperature: 0.1, timeout: "10m" }
+    });
+    transcriptSrt = String(result.content || "");
+    transcript = transcriptSrt
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !/^\d+$/.test(line) && !line.includes("-->"))
+      .map((text) => ({ text }));
+  } catch (arkError) {
+    try {
+      const result = await transcribeWithWhisper(template.videoPath, analysisDir);
+      transcript = result.transcript || [];
+      transcriptError = arkError.message
+        ? `Ark 字幕对齐失败，已使用 Whisper 兜底：${safeError(arkError)}`
+        : "";
+    } catch (whisperError) {
+      transcriptError = `Ark 与 Whisper 转写均失败：${safeError(arkError)}；${safeError(whisperError)}`;
+    }
   }
+  if (!transcriptSrt.trim() && transcript.length) {
+    transcriptSrt = transcriptToSrt(transcript, 18);
+  }
+  updateJob(jobId, {
+    status: "running",
+    progress: 55,
+    log: "正在分析逐镜画面、动作、运镜和提示词结构"
+  });
   await analyzeTemplate(template.id, jobId, true);
   const analyzedTemplate = getEntity("template", template.id);
   const shots = analyzedTemplate.recipe?.shots || [];
@@ -1482,6 +1602,10 @@ async function analyzeRemixTemplate(templateId, jobId) {
       "替换男女主角身份，保持背景、动作、切点和时间轴不变。"
     ].join("")
   }));
+  const subtitlePath = join(analysisDir, "auto-subtitles.srt");
+  if (transcriptSrt.trim()) {
+    await writeFile(subtitlePath, transcriptSrt, "utf8");
+  }
   const remixAnalysis = {
     templateId: template.id,
     totalFrames: template.remixExtraction.totalFrames,
@@ -1505,12 +1629,15 @@ async function analyzeRemixTemplate(templateId, jobId) {
     audio: {
       sourcePath: template.remixExtraction.audioPath,
       transcript,
+      transcriptSrt,
       hasVoiceover: transcript.length > 0,
       transcriptError
     },
     subtitles: {
       mode: "requires-ocr-or-reviewed-transcript",
       lines: transcript,
+      srtPath: transcriptSrt.trim() ? subtitlePath : "",
+      srtUrl: transcriptSrt.trim() ? mediaUrlForPath(subtitlePath) : "",
       fontConfidence: "unknown"
     },
     targetCandidates: ["left", "right", "person-1", "person-2", "person-3", "person-4"],

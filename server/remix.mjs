@@ -5,7 +5,8 @@ import {
   createReviewState,
   formatTimecode,
   framesToSeconds,
-  secondsToFrames
+  secondsToFrames,
+  splitSubtitleText
 } from "../src/production-model.mjs";
 
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
@@ -70,6 +71,87 @@ export function resolveRemixRange(template, project = {}) {
     )
   );
   return { start, end, duration: Number(Math.min(40, end - start).toFixed(3)) };
+}
+
+function parseSrtTimestamp(value) {
+  const match = String(value).match(
+    /^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/
+  );
+  if (!match) return null;
+  return (
+    Number(match[1]) * 3600 +
+    Number(match[2]) * 60 +
+    Number(match[3]) +
+    Number(match[4]) / 1000
+  );
+}
+
+function formatSrtTimestamp(seconds) {
+  const ms = Math.max(0, Math.round(seconds * 1000));
+  const h = String(Math.floor(ms / 3600000)).padStart(2, "0");
+  const m = String(Math.floor(ms / 60000) % 60).padStart(2, "0");
+  const s = String(Math.floor(ms / 1000) % 60).padStart(2, "0");
+  return `${h}:${m}:${s},${String(ms % 1000).padStart(3, "0")}`;
+}
+
+export function sliceSrt(srtText, rangeStart, rangeEnd) {
+  const startOffset = Math.max(0, Number(rangeStart) || 0);
+  const endOffset = Math.max(startOffset, Number(rangeEnd) || startOffset);
+  const blocks = String(srtText || "")
+    .split(/\r?\n\r?\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  const cues = [];
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/);
+    const timeIndex = lines.findIndex((line) => line.includes("-->"));
+    if (timeIndex < 0) continue;
+    const [startText, endText] = lines[timeIndex].split("-->").map((part) => part.trim());
+    const start = parseSrtTimestamp(startText);
+    const end = parseSrtTimestamp(endText);
+    if (start == null || end == null || end <= startOffset || start >= endOffset) continue;
+    const slicedStart = Math.max(0, start - startOffset);
+    const slicedEnd = Math.min(endOffset - startOffset, end - startOffset);
+    if (slicedEnd <= slicedStart) continue;
+    cues.push({
+      start: slicedStart,
+      end: slicedEnd,
+      text: lines.slice(timeIndex + 1).join("\n").trim()
+    });
+  }
+  return cues
+    .map(
+      (cue, index) =>
+        `${index + 1}\n${formatSrtTimestamp(cue.start)} --> ${formatSrtTimestamp(cue.end)}\n${cue.text}\n`
+    )
+    .join("\n");
+}
+
+export function transcriptToSrt(transcript, maxChars = 18) {
+  const cues = [];
+  for (const item of Array.isArray(transcript) ? transcript : []) {
+    const start = Number(item.start);
+    const end = Number(item.end);
+    const text = String(item.text || "").trim();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !text) {
+      continue;
+    }
+    const pieces = splitSubtitleText(text, maxChars);
+    const pieceDuration = (end - start) / Math.max(1, pieces.length);
+    pieces.forEach((piece, index) => {
+      cues.push({
+        start: start + pieceDuration * index,
+        end: start + pieceDuration * (index + 1),
+        text: piece
+      });
+    });
+  }
+  return cues
+    .map(
+      (cue, index) =>
+        `${index + 1}\n${formatSrtTimestamp(cue.start)} --> ${formatSrtTimestamp(cue.end)}\n${cue.text}\n`
+    )
+    .join("\n");
 }
 
 export function buildRemixShotPlan(template, project = {}, maxShots = 8) {
@@ -175,9 +257,9 @@ export async function extractRemixFrames({
     videoPath,
     "-vn",
     "-ac",
-    "2",
+    "1",
     "-ar",
-    "48000",
+    "16000",
     audioPath
   ]);
   onProgress(85, "提取原音频");

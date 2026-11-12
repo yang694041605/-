@@ -58,12 +58,22 @@ function runArk(args, options = {}) {
   if (existsSync(script)) {
     return runProcess(process.execPath, [script, ...args], {
       ...options,
-      env: ARK_ENV
+      env: {
+        ...ARK_ENV,
+        ...(options.skillName
+          ? { ARKCLI_SKILL_NAME: options.skillName }
+          : {})
+      }
     });
   }
   return runProcess("arkcli.cmd", args, {
     ...options,
-    env: ARK_ENV,
+    env: {
+      ...ARK_ENV,
+      ...(options.skillName
+        ? { ARKCLI_SKILL_NAME: options.skillName }
+        : {})
+    },
     shell: true
   });
 }
@@ -118,6 +128,44 @@ export async function chatText({ profile, model, prompt, instructions, parameter
   const data = parseJsonOutput(raw);
   return {
     ...data,
+    stderr: raw.stderr || "",
+    provider: "volcengine-ark"
+  };
+}
+
+export async function understandMedia({
+  profile,
+  model,
+  subSkill,
+  inputPath,
+  prompt = "",
+  parameters = {}
+}) {
+  const args = [];
+  if (profile) args.push("--profile", profile);
+  args.push(
+    "+understand",
+    subSkill,
+    "--input",
+    `@${inputPath}`,
+    "--format",
+    "json",
+    "--no-progress",
+    "--max-output-tokens",
+    String(parameters.maxOutputTokens || 6000),
+    "--temperature",
+    String(parameters.temperature ?? 0.2),
+    "--timeout",
+    String(parameters.timeout || "10m")
+  );
+  if (model) args.push("--model", model);
+  if (parameters.reasoningEffort) {
+    args.push("--reasoning-effort", parameters.reasoningEffort);
+  }
+  if (prompt) args.push(prompt);
+  const raw = await runArk(args, { skillName: "arkcli-understand" });
+  return {
+    ...parseJsonOutput(raw),
     stderr: raw.stderr || "",
     provider: "volcengine-ark"
   };
@@ -202,7 +250,14 @@ export async function submitVideo({
     outputDir
   );
   for (const input of inputs.filter(Boolean)) {
-    args.push("--input", `@${input}`);
+    args.push(
+      "--input",
+      /^(first_frame|last_frame|reference_video|reference_image|reference_audio|first|last|ref):/.test(
+        input
+      )
+        ? input
+        : `@${input}`
+    );
   }
   args.push(prompt);
   const raw = await runArk(args, { cwd: outputDir });
