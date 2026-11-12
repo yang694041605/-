@@ -93,6 +93,7 @@ function normalizeStoryboardShots(project, assetsById) {
 
 function selectedAudioTrack(project, assets, kind, explicitId) {
   const candidates = assets.filter((asset) => asset.kind === kind);
+  if (project.mode === "remix" && !explicitId) return [];
   const selected =
     candidates.find((asset) => asset.id === explicitId) ||
     candidates

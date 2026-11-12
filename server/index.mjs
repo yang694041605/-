@@ -75,6 +75,7 @@ migrateProjectRecords();
 normalizeModelDefaults();
 migrateInterruptedJobs();
 await migrateAssetHashes();
+await migrateRemixSubtitles();
 
 const port = Number(process.env.PORT || 4173);
 const host = "127.0.0.1";
@@ -556,8 +557,9 @@ async function handleApi(request, response, url) {
         `asset-remix-audio-${project.id}`
       );
       nextProject.timelineSelection = {
-        ...(project.timelineSelection || {}),
-        musicAssetId: originalAudioAsset.id
+        musicAssetId: originalAudioAsset.id,
+        voiceAssetId: "",
+        subtitleAssetId: ""
       };
     }
     if (template.remixAnalysis?.subtitles?.srtPath) {
@@ -1374,6 +1376,38 @@ async function migrateAssetHashes() {
     if (contentHash) {
       updateEntity("asset", asset.id, { contentHash, version: asset.version || 1 });
     }
+  }
+}
+
+async function migrateRemixSubtitles() {
+  for (const template of listEntities("template", 1000)) {
+    const transcript = template.remixAnalysis?.audio?.transcript || [];
+    if (!transcript.length || template.remixAnalysis?.subtitles?.srtPath) continue;
+    const srt = transcriptToSrt(transcript, 18);
+    if (!srt.trim()) continue;
+    const subtitlePath = resolve(
+      mediaRoot,
+      "templates",
+      template.id,
+      "remix-analysis",
+      "auto-subtitles.srt"
+    );
+    await mkdir(
+      resolve(mediaRoot, "templates", template.id, "remix-analysis"),
+      { recursive: true }
+    );
+    await writeFile(subtitlePath, srt, "utf8");
+    updateEntity("template", template.id, {
+      remixAnalysis: {
+        ...template.remixAnalysis,
+        subtitles: {
+          ...(template.remixAnalysis.subtitles || {}),
+          srtPath: subtitlePath,
+          srtUrl: mediaUrlForPath(subtitlePath),
+          lines: transcript
+        }
+      }
+    });
   }
 }
 
