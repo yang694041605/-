@@ -16,6 +16,10 @@ import {
   validateRenderTimeline
 } from "../server/production.mjs";
 import { shotReviewComplete } from "../src/production-model.mjs";
+import {
+  bindImportedVideo,
+  normalizeReplacementMap
+} from "../src/replacement-map.mjs";
 
 function approvedReview() {
   return {
@@ -138,6 +142,35 @@ test("成片时间线拒绝缺口、重叠和未批准镜头", () => {
   const unapprovedTimeline = buildProjectTimeline(unapproved, fixtureAssets());
   assert.throws(
     () => validateRenderTimeline(unapproved, unapprovedTimeline, fixtureAssets()),
+    /未批准/
+  );
+});
+
+test("导入新替换视频后旧审核失效，最终时间线拒绝未批准镜头", () => {
+  const project = fixtureProject();
+  const mapping = normalizeReplacementMap({
+    groom: { target: "left", sourceAssetId: "asset-groom" },
+    bride: { target: "right", sourceAssetId: "asset-bride" }
+  });
+  project.storyboard[0] = bindImportedVideo(
+    project.storyboard[0],
+    { id: "asset-imported", contentHash: "imported-hash" },
+    mapping
+  );
+  const assets = [
+    ...fixtureAssets(),
+    {
+      id: "asset-imported",
+      projectId: "project-test",
+      kind: "video",
+      localPath: "imported.mp4",
+      contentHash: "imported-hash",
+      media: { duration: 2 }
+    }
+  ];
+  const importedTimeline = buildProjectTimeline(project, assets);
+  assert.throws(
+    () => validateRenderTimeline(project, importedTimeline, assets),
     /未批准/
   );
 });
