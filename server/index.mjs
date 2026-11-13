@@ -67,6 +67,7 @@ import {
   shotReviewComplete,
   splitSubtitleText
 } from "../src/production-model.mjs";
+import { buildStoredRemixReport } from "../src/remix-report.mjs";
 import {
   buildFrameExtractionPlan,
   buildRemixShotPlan,
@@ -251,6 +252,23 @@ async function handleApi(request, response, url) {
     return project
       ? sendJson(response, 200, { ok: true, item: project })
       : sendJson(response, 404, { ok: false, error: "项目不存在" });
+  }
+
+  const remixReportMatch = path.match(
+    /^\/api\/projects\/([^/]+)\/remix\/report$/
+  );
+  if (remixReportMatch && method === "GET") {
+    const project = getEntity("project", remixReportMatch[1]);
+    if (!project) {
+      return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    }
+    const template = project.templateId
+      ? getEntity("template", project.templateId)
+      : null;
+    return sendJson(response, 200, {
+      ok: true,
+      item: buildStoredRemixReport(template, project)
+    });
   }
 
   const projectTimelineMatch = path.match(/^\/api\/projects\/([^/]+)\/timeline$/);

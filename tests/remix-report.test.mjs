@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeRemixReport,
+  buildStoredRemixReport,
   buildAudioAnalysisPrompt,
   buildReferenceImagePrompt,
   buildReplacementVideoPrompt
@@ -55,6 +56,47 @@ test("抖音报告保留 24 FPS、音轨、字幕和替换映射", () => {
     ),
     /101 帧|96 帧/
   );
+});
+
+test("已保存模板分析和项目映射会进入持久化报告", () => {
+  const report = buildStoredRemixReport(
+    {
+      id: "template-1",
+      title: "古风参考片",
+      duration: 4,
+      remixExtraction: {
+        audioPath: "C:\\private\\original-audio.wav",
+        audioUrl: "/media/templates/template-1/original-audio.wav"
+      },
+      remixAnalysis: {
+        shots: [
+          {
+            index: 1,
+            start: 0,
+            end: 4,
+            framing: "中景",
+            action: "牵手",
+            camera: "缓慢前推"
+          }
+        ],
+        audio: {
+          transcript: [{ start: 0.2, end: 3.5, text: "我们结婚啦" }]
+        }
+      }
+    },
+    {
+      remixTargets: { groom: "person-1", bride: "person-2" }
+    }
+  );
+  assert.equal(report.totalFramesAt24, 96);
+  assert.equal(report.shots[0].visual.action, "牵手");
+  assert.equal(report.shots[0].mapping.groom, "person-1");
+  assert.equal(report.shots[0].subtitles[0].text, "我们结婚啦");
+  assert.equal(
+    report.audioSource,
+    "/media/templates/template-1/original-audio.wav"
+  );
+  assert.doesNotMatch(JSON.stringify(report), /C:\\\\private/);
 });
 
 test("报告中的镜头时间和帧数会按 24 FPS 规范输出", () => {

@@ -113,6 +113,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({})
     }),
+  getRemixReport: (projectId) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/remix/report`),
   updateRemixTargets: (projectId, payload) =>
     request(`/api/projects/${encodeURIComponent(projectId)}/remix/targets`, {
       method: "PUT",

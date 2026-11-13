@@ -111,6 +111,46 @@ export function normalizeRemixReport(template = {}, options = {}) {
   };
 }
 
+export function buildStoredRemixReport(template = null, project = {}) {
+  if (!template?.id) {
+    return {
+      schema: "xying-remix-report/v1",
+      title: "尚未导入抖音参考片",
+      templateId: "",
+      duration: 0,
+      fps: 24,
+      totalFramesAt24: 0,
+      audioSource: "",
+      shots: []
+    };
+  }
+  const analyzedShots = Array.isArray(template.remixAnalysis?.shots)
+    ? template.remixAnalysis.shots
+    : [];
+  const reportTemplate = {
+    ...template,
+    recipe: {
+      ...(template.recipe || {}),
+      shots:
+        template.recipe?.shots?.length
+          ? template.recipe.shots
+          : analyzedShots
+    }
+  };
+  return normalizeRemixReport(reportTemplate, {
+    audioPath:
+      template?.remixExtraction?.audioUrl ||
+      (template?.remixExtraction?.audioPath ? "original-audio.wav" : "") ||
+      "",
+    transcript: template?.remixAnalysis?.audio?.transcript || [],
+    audioCues: [],
+    mapping: {
+      groom: project?.remixTargets?.groom || "",
+      bride: project?.remixTargets?.bride || ""
+    }
+  });
+}
+
 export function buildAudioAnalysisPrompt(report = {}) {
   return [
     "【任务】拆解参考片音频，不改写、不伪造原音频。",
