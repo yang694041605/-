@@ -22,6 +22,29 @@ function referenceRange(shot) {
   ).toFixed(2)} 秒`;
 }
 
+export const CHARACTER_SHEET_TEMPLATE_ID = "character-sheet-triple-view";
+
+export const DEFAULT_CHARACTER_SHEET_DESCRIPTION =
+  "冷静敏锐的工程师与设备分析人员，负责检修观测节点，持续追查陨川与寂灯界信号。";
+
+export function buildCharacterSheetPrompt({
+  characterDescription = DEFAULT_CHARACTER_SHEET_DESCRIPTION
+} = {}) {
+  const description =
+    String(characterDescription || "").trim() ||
+    DEFAULT_CHARACTER_SHEET_DESCRIPTION;
+  return [
+    "帮我生成人物设定图：16:9横构图，纯白背景。画面严格左右分区。",
+    "【左侧三分之二区域】水平并排三张等宽等高的人物正交全身视图，从左到右依次为正面站立视图、正侧面站立视图、背面站立视图，视图间无缝拼接。",
+    "【全身视图一致性】同一人物，统一服装和配饰细节，统一光影和阴影，统一身体比例，完全正交无透视畸变。",
+    "【全身站姿】标准中立自然站姿，身体挺直，双脚分开与肩同宽，双臂自然垂于身体两侧，全身完整入镜，无多余动作，无任何道具或场景元素。",
+    "【右侧三分之一区域】垂直堆叠三个同角色局部特写，从上到下依次为：顶部—下巴特写（仅露出下唇以下至下颌轮廓，严禁出现眼睛、鼻子和额头）；中间—眉眼特写（仅露出眉毛和眼睛区域，严禁出现完整面部、额头和鼻子）；底部—额头特写（仅露出完整额头、发际线至眉毛上方，严禁出现眼睛和鼻子）。",
+    "【特写一致性】所有特写与左侧全身图为同一人物，相同光影和质感。",
+    "【画质】高精度，细节极致，高分辨率角色设定图风格，纯白背景。",
+    `【人物形象描述】${description}`
+  ].join("\n");
+}
+
 export function buildImagePrompt(shot = {}, project = {}) {
   const groom = project.groom || "男主角";
   const bride = project.bride || "女主角";

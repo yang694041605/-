@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildImagePrompt,
   buildVideoPrompt,
+  buildCharacterSheetPrompt,
   promptFingerprintInput
 } from "../src/prompt-library.mjs";
 
@@ -90,4 +91,29 @@ test("提示词指纹输入会忽略预览文本和版本字段", () => {
   assert.equal(value.shotId, "shot-07");
   assert.equal(value.referenceStart, 12);
   assert.equal(value.groom, "陈一");
+});
+
+test("角色三视图模板包含全身三视图、局部特写和可编辑人物描述", () => {
+  const prompt = buildCharacterSheetPrompt({
+    characterDescription: "冷静敏锐的工程师与设备分析人员。"
+  });
+  for (const label of [
+    "16:9横构图",
+    "左侧三分之二区域",
+    "正面站立视图",
+    "正侧面站立视图",
+    "背面站立视图",
+    "右侧三分之一区域",
+    "下巴特写",
+    "眉眼特写",
+    "额头特写"
+  ]) {
+    assert.match(prompt, new RegExp(label));
+  }
+  assert.match(prompt, /冷静敏锐的工程师与设备分析人员/);
+  assert.match(prompt, /纯白背景/);
+  assert.match(
+    prompt,
+    /眉眼特写（仅露出眉毛和眼睛区域，严禁出现完整面部、额头和鼻子）/
+  );
 });

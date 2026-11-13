@@ -438,7 +438,18 @@ test("自我生成只显示 14 个直接步骤且第 8 步提供批量生图工�
        Boolean(document.querySelector('[data-batch-confirm]')) &&
        Boolean(document.querySelector('[data-action="submit-image-batch"]')) &&
        Boolean(document.querySelector('[data-action="review-batch-image"]')) &&
+       Boolean(document.querySelector('[data-character-sheet-template]')) &&
        document.body.innerText.includes('批量生成分镜图片')`
+    );
+    await page.evaluate(`(() => {
+      const details = document.querySelector('[data-character-sheet-template]');
+      details.open = true;
+      details.querySelector('[data-action="apply-character-sheet-template"]').click();
+      return true;
+    })()`);
+    await waitForBrowser(
+      page.evaluate,
+      `document.querySelector('[data-image-prompt]')?.value.includes('左侧三分之二区域')`
     );
     await page.evaluate(
       `document.querySelector('[data-action="review-batch-image"][data-review-status="approved"]').click(); true`

@@ -4492,3 +4492,66 @@ small {
     display: inline-flex;
   }
 }
+
+.character-sheet-template {
+  margin-top: 14px;
+  border: 1px solid rgba(169, 23, 28, 0.2);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(205, 157, 78, 0.12), transparent 32%),
+    rgba(255, 249, 239, 0.72);
+}
+
+.character-sheet-template summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  color: var(--red);
+  cursor: pointer;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.character-sheet-template summary::-webkit-details-marker {
+  display: none;
+}
+
+.character-sheet-template summary::after {
+  content: "展开";
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.character-sheet-template[open] summary::after {
+  content: "收起";
+}
+
+.character-sheet-template summary small {
+  margin-left: auto;
+  color: var(--gold);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.character-sheet-template-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+  border-top: 1px solid rgba(169, 23, 28, 0.09);
+}
+
+.character-sheet-template-body > .field {
+  margin-top: 12px;
+}
+
+.character-sheet-template textarea {
+  font-size: 13px;
+  line-height: 1.65;
+}

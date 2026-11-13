@@ -16,8 +16,10 @@ import {
   shotReviewComplete
 } from "./production-model.mjs";
 import {
+  buildCharacterSheetPrompt,
   buildImagePrompt,
-  buildVideoPrompt
+  buildVideoPrompt,
+  DEFAULT_CHARACTER_SHEET_DESCRIPTION
 } from "./prompt-library.mjs";
 import {
   WORKFLOW_SPECS,
@@ -1829,7 +1831,7 @@ function remixStepContent(number) {
       </section>
       <div class="content-grid">
         <section class="card card-pad"><div class="section-title"><div><h3>音频分析提示词</h3><p>保留原始时间码</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-audio-prompt]">复制</button></div><textarea class="textarea" data-remix-audio-prompt readonly style="min-height:170px;">${esc(buildAudioAnalysisPrompt(report))}</textarea></section>
-        <section class="card card-pad"><div class="section-title"><div><h3>图片生成提示词</h3><p>图一与图二身份锚点</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-image-prompt]">复制</button></div><textarea class="textarea" data-remix-image-prompt readonly style="min-height:170px;">${esc(imagePrompt)}</textarea></section>
+        <section class="card card-pad"><div class="section-title"><div><h3>图片生成提示词</h3><p>图一与图二身份锚点</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-image-prompt]">复制</button></div><textarea class="textarea" data-remix-image-prompt readonly style="min-height:170px;">${esc(imagePrompt)}</textarea>${characterSheetTemplateBlock("[data-remix-image-prompt]")}</section>
       </div>
       <section class="card card-pad"><div class="section-title"><div><h3>视频替换提示词</h3><p>人物、道具、动作和背景约束</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-video-prompt]">复制</button></div><textarea class="textarea" data-remix-video-prompt readonly style="min-height:200px;">${esc(videoPrompt)}</textarea></section>
     </div>`;
@@ -2211,6 +2213,7 @@ function shotImageWorkbench(stepNumber, candidateShots, selected) {
       <figure class="shot-concept-reference"><img src="${esc(conceptImage)}" alt="${esc(shot.title)} 风格参考" /><figcaption><strong>本镜风格参考</strong><small>参考片抽帧，仅用于构图、服装和光线；真实人物身份必须取客户照片。</small></figcaption></figure>
       <div class="shot-reference-grid">${referenceAssets.map(([label, assetId]) => `<div class="shot-reference-item ${assetId ? "ready" : "missing"}"><span>${assetId ? "✓" : "!"}</span><div><strong>${esc(label)}</strong><small>${esc(assetId || "尚缺，先到素材中心补齐")}</small></div></div>`).join("")}</div>
       <label class="field" style="margin-top:14px;"><span class="field-label">图片提示词</span><textarea class="textarea prompt-composer" data-image-prompt>${esc(prompt)}</textarea><small class="field-hint">提示词描述一个稳定画面，不写镜头运动。绑定真实男女主照片是身份一致的前提。</small></label>
+      ${characterSheetTemplateBlock("[data-image-prompt]")}
       <div class="model-config-actions">
         <button class="button ghost small-button" data-action="build-shot-image-prompt" data-shot-id="${shot.id}">重新生成图片提示词</button>
         <button class="button ghost small-button" data-action="copy-image-prompt">复制图片提示词</button>
@@ -2473,6 +2476,35 @@ function renderVideoAssets(items) {
 
 function buildReplacementPrompt(shot = storyboard[0], policy = "keep") {
   return buildVideoPrompt(shot || storyboard[0] || {}, state, { policy });
+}
+
+function characterSheetTemplateBlock(targetSelector = "") {
+  const prompt = buildCharacterSheetPrompt();
+  return `
+    <details class="character-sheet-template" data-character-sheet-template>
+      <summary>
+        <span>角色三视图 + 三局部特写</span>
+        <small>人物设定图模板</small>
+      </summary>
+      <div class="character-sheet-template-body">
+        <div class="field">
+          <label>人物形象描述</label>
+          <input class="input" data-character-sheet-description value="${esc(DEFAULT_CHARACTER_SHEET_DESCRIPTION)}" />
+          <span class="field-hint">替换为当前角色年龄、身份、气质、服装和职业描述。</span>
+        </div>
+        <textarea class="textarea" data-character-sheet-preview readonly style="min-height:210px;">${esc(prompt)}</textarea>
+        <div class="model-config-actions">
+          <button class="button secondary small-button" data-action="update-character-sheet-template">刷新预览</button>
+          ${
+            targetSelector
+              ? `<button class="button primary small-button" data-action="apply-character-sheet-template" data-target-selector="${esc(targetSelector)}">套用到图片提示词</button>`
+              : ""
+          }
+          <button class="button ghost small-button" data-action="copy-character-sheet-template">复制模板</button>
+        </div>
+      </div>
+    </details>
+  `;
 }
 
 function videoPresetPrompt(name) {
@@ -3073,6 +3105,10 @@ function promptsPage() {
     <div class="page">
       ${pageHeader("prompts")}
       ${progressStrip(2)}
+      <section class="card card-pad" style="margin-bottom:18px;">
+        <div class="section-title"><div><h2>图片提示词模板库</h2><p>可复制、可套用到第 7、8 步和图片生成中心</p></div><span class="badge gold">角色设定模板</span></div>
+        ${characterSheetTemplateBlock()}
+      </section>
       <div class="prompt-grid">
         <section class="prompt-card card">
           <div class="prompt-card-head"><h3>人物身份提示词</h3><button class="text-button" data-action="copy-identity">复制全部</button></div>
@@ -3168,6 +3204,7 @@ function generatePage() {
         <section class="card card-pad">
           <div class="section-title"><div><h2>生成图片</h2><p>人物定妆、服装、场景或首帧</p></div><span class="badge gold">${esc(imageModel?.model || "未配置")}</span></div>
           <div class="field"><label>图片提示词</label><textarea class="textarea" data-image-prompt style="min-height:125px;">电影级婚礼人物定妆图，成年东方男女，朱红中式婚服与凤冠霞帔，真实皮肤与织物纹理，干净中性背景，全身正面，不出现文字和水印。</textarea></div>
+          ${characterSheetTemplateBlock("[data-image-prompt]")}
           <button class="button primary" style="width:100%;margin-top:12px;" data-action="generate-image-direct">${icon("sparkle")}使用 ${esc(imageModel?.label || "默认图片模型")} 生成</button>
         </section>
         <section class="card card-pad">
@@ -4361,6 +4398,50 @@ async function handleAction(button) {
       imagePrompt: prompt
     });
     showToast("图片提示词已按当前镜头重新生成");
+  }
+  if (action === "update-character-sheet-template") {
+    const container = button.closest("[data-character-sheet-template]");
+    const description =
+      container?.querySelector("[data-character-sheet-description]")?.value ||
+      DEFAULT_CHARACTER_SHEET_DESCRIPTION;
+    const preview = container?.querySelector("[data-character-sheet-preview]");
+    if (preview) {
+      preview.value = buildCharacterSheetPrompt({
+        characterDescription: description
+      });
+    }
+    showToast("角色三视图模板已刷新");
+  }
+  if (action === "apply-character-sheet-template") {
+    const container = button.closest("[data-character-sheet-template]");
+    const description =
+      container?.querySelector("[data-character-sheet-description]")?.value ||
+      DEFAULT_CHARACTER_SHEET_DESCRIPTION;
+    const prompt = buildCharacterSheetPrompt({
+      characterDescription: description
+    });
+    const target = button.dataset.targetSelector
+      ? document.querySelector(button.dataset.targetSelector)
+      : null;
+    if (!target) {
+      showToast("当前页面没有可套用的图片提示词输入框");
+      return;
+    }
+    target.value = prompt;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    const preview = container?.querySelector("[data-character-sheet-preview]");
+    if (preview) preview.value = prompt;
+    target.focus();
+    showToast("角色三视图模板已套用到图片提示词，可继续修改");
+  }
+  if (action === "copy-character-sheet-template") {
+    const container = button.closest("[data-character-sheet-template]");
+    const description =
+      container?.querySelector("[data-character-sheet-description]")?.value ||
+      DEFAULT_CHARACTER_SHEET_DESCRIPTION;
+    await copyText(
+      buildCharacterSheetPrompt({ characterDescription: description })
+    );
   }
   if (action === "copy-image-prompt") {
     await copyText(document.querySelector("[data-image-prompt]")?.value || "");
