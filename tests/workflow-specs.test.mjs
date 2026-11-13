@@ -44,21 +44,8 @@ test("缺口计算会返回具体输入名称", () => {
   assert.deepEqual(gaps, ["五幕事实", "目标时长"]);
 });
 
-test("每个步骤只保留四个可直接打开完整页面的分类", () => {
+test("每个故事步骤都是直接打开完整页面的末端入口", () => {
   for (let number = 1; number <= 14; number += 1) {
-    const groups = buildStepNavigationChildren(number);
-    assert.equal(groups.length, 4);
-    assert.deepEqual(
-      groups.map((group) => group.label),
-      ["输入清单", "操作功能", "步骤产物", "人工检查"]
-    );
-    assert.ok(
-      groups.every(
-        (group) =>
-          group.route === `step${number}` &&
-          !group.target &&
-          !group.children?.length
-      )
-    );
+    assert.deepEqual(buildStepNavigationChildren(number), []);
   }
 });

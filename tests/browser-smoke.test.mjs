@@ -238,17 +238,10 @@ test("三级至五级导航可跳转，图片可放大预览并显示保存删�
     );
     await waitForBrowser(
       page.evaluate,
-      `location.hash.includes('/story/step/7')`
-    );
-
-    await page.evaluate(
-      `document.querySelector('[data-nav-id="step-7-level4-input"]').click(); true`
-    );
-    await waitForBrowser(
-      page.evaluate,
       `location.hash.includes('/story/step/7') &&
+       !document.querySelector('[data-nav-id="step-7-level4-input"]') &&
        !document.querySelector('[data-nav-id="step-7-level5-input-1"]') &&
-       !document.querySelector('[data-nav-id="step-7-level4-input"]').hasAttribute('aria-expanded') &&
+       !document.querySelector('[data-nav-id="step-07"]').hasAttribute('aria-expanded') &&
        document.body.innerText.includes('本步生产说明') &&
        document.body.innerText.includes('本步图片参考')`
     );

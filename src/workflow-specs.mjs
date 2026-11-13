@@ -210,19 +210,6 @@ export function workflowStepGaps(step, state = {}) {
     .map(({ label }) => label);
 }
 
-export function buildStepNavigationChildren(stepNumber) {
-  const step = getWorkflowStep(stepNumber);
-  if (!step) return [];
-  const groups = [
-    ["input", "输入清单"],
-    ["actions", "操作功能"],
-    ["outputs", "步骤产物"],
-    ["checks", "人工检查"]
-  ];
-  return groups.map(([key, label]) => ({
-    id: `step-${step.number}-level4-${key}`,
-    label,
-    symbol: label.slice(0, 1),
-    route: step.route
-  }));
+export function buildStepNavigationChildren() {
+  return [];
 }
