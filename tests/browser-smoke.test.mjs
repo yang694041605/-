@@ -218,6 +218,46 @@ test("造型页在浏览器中完成挂载且没有未捕获异常", { timeout: 
   }
 });
 
+test("主页显示红色双入口、五个顶部导航且不重复侧栏", { timeout: 30000 }, async (t) => {
+  const browser = await findBrowser();
+  if (!browser) {
+    t.skip("未找到 Playwright Chromium Headless Shell");
+    return;
+  }
+  const { child, temp, base } = await startServer();
+  try {
+    const result = await new Promise((resolveRun, reject) => {
+      const process = spawn(browser, [
+        "--headless",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--virtual-time-budget=5000",
+        "--dump-dom",
+        `${base}/#/overview`
+      ], { windowsHide: true });
+      let stdout = "";
+      let stderr = "";
+      process.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      process.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      process.on("error", reject);
+      process.on("close", () => resolveRun({ stdout, stderr }));
+    });
+    assert.doesNotMatch(result.stderr, /Uncaught (ReferenceError|TypeError|SyntaxError)/);
+    assert.match(result.stdout, /抖音链接复刻/);
+    assert.match(result.stdout, /自我生成婚礼电影/);
+    assert.match(result.stdout, /dual-entry-home/);
+    assert.match(result.stdout, /app-shell no-sidebar/);
+    assert.equal((result.stdout.match(/class="top-tab /g) || []).length, 5);
+    assert.doesNotMatch(result.stdout, /婚礼项目与素材/);
+  } finally {
+    await stopServer(child, temp);
+  }
+});
+
 test("三级至五级导航可跳转，图片可放大预览并显示保存删除入口", { timeout: 40000 }, async (t) => {
   const browser = await findBrowser();
   if (!browser) {

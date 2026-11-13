@@ -1176,6 +1176,9 @@ async function handleMediaViewerClick(event) {
 }
 
 function render() {
+  document
+    .querySelector("#app")
+    .classList.toggle("no-sidebar", studioModeForRoute() === "home");
   document.querySelector(".top-tabs").innerHTML = TOP_NAVIGATION.map(
     (item) => `
       <button class="top-tab ${isTopNavigationActive(item) ? "active" : ""}" data-route="${item.route}">
@@ -1275,6 +1278,10 @@ function restoreRouteFromHash() {
 function renderNav() {
   const root = document.querySelector("#nav-tree");
   const mode = studioModeForRoute();
+  if (mode !== "self" && mode !== "remix") {
+    root.innerHTML = "";
+    return;
+  }
   if (mode === "self") openNavIds.add("self");
   if (mode === "remix") openNavIds.add("remix");
   root.innerHTML = buildStudioNavigation(mode)
@@ -1415,116 +1422,104 @@ function progressStrip(current = 0) {
 
 function overviewPage() {
   const plan = framePlan();
-  const uploadedCount = Number(Boolean(state.photos.groom)) + Number(Boolean(state.photos.bride));
+  const uploadedCount =
+    Number(Boolean(state.photos.groom)) + Number(Boolean(state.photos.bride));
+  const readyModels = runtime.models.filter(
+    (model) => model.enabled !== false && model.status === "ready"
+  ).length;
+  const latestJobs = runtime.jobs.slice(0, 3);
+  const jobStatusLabels = {
+    queued: "排队中",
+    running: "运行中",
+    succeeded: "已完成",
+    failed: "失败",
+    unknown: "待核对原任务"
+  };
   return `
-    <div class="page">
-      <section class="hero">
-        <div class="hero-copy">
-          <div class="hero-badge"><span class="spark"></span>真实故事 · AI 视觉 · 婚礼首映</div>
-          <h1 class="hero-title">
-            <span>把你们的故事，</span>
-            <span>拍成一部 <em>婚礼微电影</em></span>
-          </h1>
-          <p>输入姓名、人物照片与爱情故事，完成模板解析、叙事、定妆、分镜、图片视频生成、语音配乐和本地成片合成。</p>
-          <div class="hero-actions">
-            <button class="button primary" data-route="wizard">${icon("sparkle")}开始 14 步制作</button>
-            <button class="button secondary" data-route="remix">${icon("play")}抖音模板复刻</button>
-            <button class="button ghost" data-route="assets">打开素材中心${icon("arrow")}</button>
-          </div>
-          <div class="hero-stats">
-            <div class="hero-stat"><strong>${plan.totalFrames}</strong><span>总画格 / 24 FPS</span></div>
-            <div class="hero-stat"><strong>03</strong><span>剧情时代 / 同一对手</span></div>
-            <div class="hero-stat"><strong>${uploadedCount}/2</strong><span>人物照片已就位</span></div>
+    <div class="page dual-entry-home">
+      <section class="home-cinema-hero">
+        <div class="home-copy">
+          <div class="hero-badge"><span class="spark"></span>囍映 AI · 婚礼电影首映</div>
+          <p class="home-kicker">${esc(state.projectName)}</p>
+          <h1>${esc(state.groom)} <em>×</em> ${esc(state.bride)}</h1>
+          <p class="home-lead">${esc(formatDate(state.date))} · ${esc(state.city)} · ${state.duration} 秒 · ${plan.totalFrames} 帧</p>
+          <div class="home-seal-row">
+            <span>24 FPS</span>
+            <span>${esc(state.theme)}</span>
+            <span>${uploadedCount}/2 真人照片</span>
           </div>
         </div>
-        <div class="hero-visual">
-          <div class="film-poster">
-            <div class="poster-inner">
-              <div class="poster-label">A WEDDING FILM</div>
-              <div class="poster-names">${esc(state.groom)}<br />& ${esc(state.bride)}</div>
-              <div class="poster-date">${formatDate(state.date)} · ${esc(state.city)}</div>
-            </div>
-            <div class="poster-float top">${icon("sparkle")} 故事引擎已就绪</div>
-            <div class="poster-float bottom">${plan.fps} FPS · ${state.duration}s</div>
-          </div>
+        <div class="home-poster" aria-hidden="true">
+          <span class="home-poster-mark">囍</span>
+          <small>OUR WEDDING FILM</small>
+          <strong>${esc(state.groom)}<br />& ${esc(state.bride)}</strong>
+          <span>${esc(formatDate(state.date))}</span>
         </div>
       </section>
 
-      ${progressStrip(0)}
+      <section class="entry-grid" aria-label="婚礼微电影制作入口">
+        <button class="entry-card entry-remix" data-route="remix">
+          <span class="entry-number">01</span>
+          <span class="entry-kicker">REFERENCE REMIX · 5 STEPS</span>
+          <strong>抖音链接复刻</strong>
+          <span class="entry-description">提取画面、音频、字幕和提示词，再用当前新人的授权素材逐镜替换人物与道具。</span>
+          <span class="entry-action">进入抖音复刻 ${icon("arrow")}</span>
+        </button>
+        <button class="entry-card entry-self" data-route="wizard">
+          <span class="entry-number">02</span>
+          <span class="entry-kicker">ORIGINAL STORY · 14 STEPS</span>
+          <strong>自我生成婚礼电影</strong>
+          <span class="entry-description">从真实爱情故事开始，完成五幕文案、旁白、分镜、图片、视频、音乐与正式交付。</span>
+          <span class="entry-action">进入 14 步制作 ${icon("arrow")}</span>
+        </button>
+      </section>
 
-      <div class="dashboard-grid">
-        <div class="stack">
-          <section class="card card-pad">
-            <div class="section-title">
-              <div><h2>先告诉我，故事里的你们是谁</h2><p>姓名会写入剧情、分镜、提示词和片尾字幕</p></div>
-              <span class="badge red">第 1 步</span>
-            </div>
-            <div class="project-brief">
-              <div class="field">
-                <label for="overview-project">项目名称</label>
-                <input id="overview-project" class="input" data-field="projectName" value="${esc(state.projectName)}" />
-              </div>
-              <div class="field">
-                <label for="overview-date">婚礼日期</label>
-                <input id="overview-date" class="input" type="date" data-field="date" value="${esc(state.date)}" />
-              </div>
-              <div class="field">
-                <label for="overview-groom">男主角姓名</label>
-                <input id="overview-groom" class="input" data-field="groom" value="${esc(state.groom)}" placeholder="请输入姓名" />
-              </div>
-              <div class="field">
-                <label for="overview-bride">女主角姓名</label>
-                <input id="overview-bride" class="input" data-field="bride" value="${esc(state.bride)}" placeholder="请输入姓名" />
-              </div>
-              <div class="field full">
-                <label for="overview-story">你们的爱情故事</label>
-                <textarea id="overview-story" class="textarea" data-field="story" rows="4">${esc(state.story)}</textarea>
-                <span class="field-hint">越具体越好：在哪里认识、哪件小事最难忘、两个人现在的状态。</span>
-              </div>
-            </div>
-            <div class="divider"></div>
-            <div class="section-title" style="margin-bottom: 0;">
-              <div><h3>婚礼电影感由故事决定，不由滤镜决定</h3><p>建议 40–60 秒，先让亲友看懂“你们是谁”，再被情绪打动。</p></div>
-              <button class="button secondary small-button" data-action="build-treatment">${icon("sparkle")}重构故事大纲</button>
-            </div>
-          </section>
+      <section class="home-status-grid">
+        <article class="card card-pad home-status-card">
+          <div class="section-title">
+            <div><h2>模型与工具</h2><p>${readyModels} 个核心模型已就绪</p></div>
+            <button class="text-button" data-route="models">模型中心 →</button>
+          </div>
+          <div class="home-status-list">
+            <div><span class="status-dot"></span><strong>${runtime.online ? "本地服务在线" : "本地服务未连接"}</strong><small>${runtime.online ? "生成与剪辑接口可用" : "运行 npm start 后启用"}</small></div>
+            <div><span class="status-orb gold"></span><strong>${readyModels}</strong><small>已启用的默认模型</small></div>
+            <div><span class="status-orb red"></span><strong>${runtime.templates.length}</strong><small>已导入参考模板</small></div>
+          </div>
+        </article>
+        <article class="card card-pad home-status-card">
+          <div class="section-title">
+            <div><h2>最近任务</h2><p>付费任务不会自动重复提交</p></div>
+            <button class="text-button" data-route="jobs">任务中心 →</button>
+          </div>
+          <div class="home-job-list">
+            ${
+              latestJobs.length
+                ? latestJobs
+                    .map(
+                      (job) => `
+                        <div class="home-job-row">
+                          <div><strong>${esc(jobLabel(job.kind))}</strong><small>${esc(job.progress || 0)}% · ${esc(job.projectId || "默认项目")}</small></div>
+                          <span class="badge ${job.status === "succeeded" ? "green" : job.status === "failed" ? "red" : "gold"}">${esc(jobStatusLabels[job.status] || job.status)}</span>
+                        </div>`
+                    )
+                    .join("")
+                : '<p class="small muted home-empty-copy">还没有生成任务。选择上方任一入口开始制作。</p>'
+            }
+          </div>
+        </article>
+      </section>
 
-          <section class="card card-pad">
-            <div class="section-title">
-              <div><h2>创作路线</h2><p>从真实故事到可交付成片</p></div>
-              <button class="text-button" data-route="guide">查看操作指南 →</button>
-            </div>
-            <div class="feature-grid">
-              <div class="feature-card"><div class="feature-icon">叙</div><h4>故事共创</h4><p>提炼真实细节，生成相识、相知、确认、相伴、承诺五幕。</p></div>
-              <div class="feature-card"><div class="feature-icon">容</div><h4>人物锁定</h4><p>男女主照片、身份提示词与多时代造型连续。</p></div>
-              <div class="feature-card"><div class="feature-icon">帧</div><h4>24 FPS 分镜</h4><p>在镜头级对齐时长、动作和总画格。</p></div>
-            </div>
-          </section>
+      <section class="home-project-strip card">
+        <div>
+          <span class="eyebrow">CURRENT PROJECT</span>
+          <h3>${esc(state.projectName)}</h3>
+          <p>${esc(treatment.logline)}</p>
         </div>
-
-        <div class="stack">
-          <section class="project-summary card">
-            <p class="eyebrow">CURRENT TREATMENT</p>
-            <h3>${esc(treatment.logline.split("，")[0])}</h3>
-            <div class="couple">${esc(coupleName())}</div>
-            <div class="summary-meta">
-              <div class="summary-meta-item"><span>叙事主题</span><strong>${esc(state.theme)}</strong></div>
-              <div class="summary-meta-item"><span>情绪基调</span><strong>${esc(state.tone)}</strong></div>
-              <div class="summary-meta-item"><span>成片时长</span><strong>${state.duration} 秒 / ${framePlan().totalFrames} 帧</strong></div>
-              <div class="summary-meta-item"><span>画幅规格</span><strong>${esc(state.aspect)} · 24 FPS</strong></div>
-            </div>
-          </section>
-          <section class="card card-pad">
-            <div class="section-title"><div><h3>开机前检查</h3><p>当前项目进度</p></div></div>
-            <div class="checklist">
-              <div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>故事主题已选择</strong><small>${esc(state.theme)} · ${esc(state.tone)}</small></div></div>
-              <div class="check-item"><span class="check-icon ${state.photos.groom ? "" : "pending"}">${state.photos.groom ? "✓" : "!"}</span><div class="check-copy"><strong>男主角照片</strong><small>${state.photos.groom ? "已上传，可用于身份参考" : "进入人物设定上传"}</small></div></div>
-              <div class="check-item"><span class="check-icon ${state.photos.bride ? "" : "pending"}">${state.photos.bride ? "✓" : "!"}</span><div class="check-copy"><strong>女主角照片</strong><small>${state.photos.bride ? "已上传，可用于身份参考" : "进入人物设定上传"}</small></div></div>
-              <div class="check-item"><span class="check-icon ${runtime.online ? "" : "pending"}">4</span><div class="check-copy"><strong>统一模型服务</strong><small>${runtime.online ? "本地服务在线，可提交生成任务" : "运行 npm start 后启用"}</small></div></div>
-            </div>
-          </section>
+        <div class="home-project-actions">
+          <button class="button ghost small-button" data-route="settings">项目设置</button>
+          <button class="button secondary small-button" data-route="assets">素材管理</button>
         </div>
-      </div>
+      </section>
     </div>
   `;
 }
@@ -3439,6 +3434,22 @@ function settingsPage() {
 
 function bindCurrentView() {
   prepareMediaPreviewElements();
+  const homeHero = document.querySelector(".home-cinema-hero");
+  if (homeHero) {
+    homeHero.addEventListener("mousemove", (event) => {
+      const rect = homeHero.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width - 0.5;
+      const y = (event.clientY - rect.top) / rect.height - 0.5;
+      const poster = homeHero.querySelector(".home-poster");
+      if (poster) {
+        poster.style.transform = `rotateY(${x * 7}deg) rotateX(${-y * 5}deg) translateY(-3px)`;
+      }
+    });
+    homeHero.addEventListener("mouseleave", () => {
+      const poster = homeHero.querySelector(".home-poster");
+      if (poster) poster.style.transform = "";
+    });
+  }
   const hero = document.querySelector(".hero");
   if (hero) {
     hero.addEventListener("mousemove", (event) => {
