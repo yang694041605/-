@@ -392,3 +392,65 @@ test("抖音复刻显示五个直接步骤并打开对应页面", { timeout: 400
     await stopServer(server, temp);
   }
 });
+
+test("自我生成只显示 14 个直接步骤且第 8 步提供批量生图工作台", { timeout: 40000 }, async (t) => {
+  const browser = await findBrowser();
+  if (!browser) {
+    t.skip("未找到 Playwright Chromium Headless Shell");
+    return;
+  }
+  const { child: server, temp, base } = await startServer();
+  let page = null;
+  try {
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z0YQAAAAASUVORK5CYII=",
+      "base64"
+    );
+    const upload = await fetch(
+      `${base}/api/assets/upload?kind=batch-image&projectId=project-default&name=batch-candidate.png`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: png
+      }
+    );
+    assert.equal(upload.status, 201);
+    page = await openCdpPage(browser, `${base}/#/wizard`);
+    await waitForBrowser(
+      page.evaluate,
+      `document.querySelectorAll('[data-nav-id^="self-step-"]').length === 14`
+    );
+    assert.equal(
+      await page.evaluate(
+        `document.querySelector('[data-nav-id="self-step-1"]').hasAttribute("aria-expanded")`
+      ),
+      false
+    );
+
+    await page.evaluate(
+      `document.querySelector('[data-nav-id="self-step-8"]').click(); true`
+    );
+    await waitForBrowser(
+      page.evaluate,
+      `location.hash.includes('/story/step/8') &&
+       Boolean(document.querySelector('[data-batch-count]')) &&
+       Boolean(document.querySelector('[data-action="estimate-image-batch"]')) &&
+       Boolean(document.querySelector('[data-batch-confirm]')) &&
+       Boolean(document.querySelector('[data-action="submit-image-batch"]')) &&
+       Boolean(document.querySelector('[data-action="review-batch-image"]')) &&
+       document.body.innerText.includes('批量生成分镜图片')`
+    );
+    await page.evaluate(
+      `document.querySelector('[data-action="review-batch-image"][data-review-status="approved"]').click(); true`
+    );
+    await waitForBrowser(
+      page.evaluate,
+      `document.body.innerText.includes('候选已批准')`
+    );
+    assert.deepEqual(page.exceptions, []);
+    page.close();
+  } finally {
+    page?.child?.kill();
+    await stopServer(server, temp);
+  }
+});

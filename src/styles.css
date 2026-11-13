@@ -1606,6 +1606,27 @@ button.chip.active {
   color: var(--muted);
 }
 
+.batch-workbench {
+  border-color: rgba(169, 23, 28, 0.2);
+}
+
+.batch-candidate-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.batch-candidate-card .asset-info small {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.batch-review-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
 @media (max-width: 920px) {
   .remix-report-list,
   .remix-identity-row {
@@ -1619,12 +1640,20 @@ button.chip.active {
   .remix-shot-picker {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .batch-candidate-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 680px) {
   .remix-report-list,
   .remix-identity-row,
   .remix-track-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-candidate-grid {
     grid-template-columns: 1fr;
   }
 }

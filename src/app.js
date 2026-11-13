@@ -1665,6 +1665,107 @@ function remixReviewItems() {
   ];
 }
 
+function currentBatchImageAssets() {
+  return runtime.assets.filter(
+    (asset) =>
+      (asset.projectId || asset.ownerId) === currentProjectId &&
+      ["batch-image", "image"].includes(asset.kind) &&
+      asset.url
+  );
+}
+
+function batchJobForAsset(asset) {
+  return runtime.jobs.find((job) => job.id === asset.jobId) || null;
+}
+
+function renderBatchImageResults(items) {
+  if (!items.length) {
+    return '<div class="empty-state" style="min-height:170px;"><div><div class="empty-state-symbol">选</div><h3>还没有批量候选</h3><p>确认模型和数量后提交，生成结果会进入这里。</p></div></div>';
+  }
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  const reviews = project?.batchImageReviews || {};
+  return `<div class="asset-grid batch-candidate-grid">${items
+    .map((asset) => {
+      const job = batchJobForAsset(asset);
+      const shotId = job?.input?.shotId || "";
+      const variant = job?.input?.variant || asset.variant || "";
+      const promptVersion =
+        job?.input?.promptVersion?.version || asset.version || 1;
+      const seed = job?.input?.seed || asset.seed || variant || "未记录";
+      const review = reviews[asset.id] || "pending";
+      return `<article class="asset-card card batch-candidate-card">
+        <div class="asset-preview"><img src="${esc(api.mediaUrl(asset.url))}" alt="${esc(asset.title || "批量角色图")}" /></div>
+        <div class="asset-info">
+          <strong>${esc(asset.title || "批量角色图")}</strong>
+          <small>镜头 ${esc(shotId || "未绑定")} · 变体 ${esc(variant || "—")}</small>
+          <small>${esc(asset.model || "未记录模型")} · 提示词 v${esc(promptVersion)} · 种子/变体 ${esc(seed)}</small>
+          <small>图一 ${esc(state.groom)} · 图二 ${esc(state.bride)}</small>
+          <span class="badge ${review === "approved" ? "green" : review === "rejected" ? "red" : "gray"}">${
+            review === "approved"
+              ? "候选已批准"
+              : review === "rejected"
+                ? "已淘汰"
+                : "待选版"
+          }</span>
+          <div class="batch-review-actions">
+            <button class="button secondary small-button" data-action="review-batch-image" data-asset-id="${asset.id}" data-review-status="approved">批准候选</button>
+            <button class="button ghost small-button danger-text" data-action="review-batch-image" data-asset-id="${asset.id}" data-review-status="rejected">淘汰</button>
+            <button class="button primary small-button" data-action="bind-batch-image" data-asset-id="${asset.id}" ${shotId && review === "approved" ? "" : "disabled"}>绑定为首帧</button>
+          </div>
+        </div>
+      </article>`;
+    })
+    .join("")}</div>`;
+}
+
+function renderBatchImageWorkbench({
+  shots,
+  includeTargets = false,
+  emptyMessage = "建立镜头计划后会显示可批量生成的镜头。"
+}) {
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  const imageModel = defaultModel("image");
+  const hasIdentities = Boolean(
+    state.photoAssetIds?.groom && state.photoAssetIds?.bride
+  );
+  return `<section class="card card-pad batch-workbench">
+    <div class="section-title">
+      <div><h2>批量生成分镜图片</h2><p>选择镜头和候选数量，费用确认后才提交付费任务</p></div>
+      <span class="badge ${hasIdentities && imageModel ? "green" : "red"}">${
+        !hasIdentities
+          ? "缺少男女主照片"
+          : !imageModel
+            ? "缺少图片模型"
+            : "可以批量生成"
+      }</span>
+    </div>
+    <div class="remix-identity-row">
+      <div class="remix-identity-card">${state.photos.groom ? `<img src="${esc(api.mediaUrl(state.photos.groom))}" alt="${esc(state.groom)}" />` : "男"}<strong>图一 · ${esc(state.groom)}</strong></div>
+      <div class="remix-identity-card">${state.photos.bride ? `<img src="${esc(api.mediaUrl(state.photos.bride))}" alt="${esc(state.bride)}" />` : "女"}<strong>图二 · ${esc(state.bride)}</strong></div>
+      <div class="remix-identity-note"><strong>${esc(imageModel?.label || "未配置图片模型")}</strong><small>${imageModel?.status === "ready" ? "模型已配置，仍需确认报价" : "请到模型中心配置图片模型"}</small><button class="text-button" data-route="models">模型中心 →</button></div>
+    </div>
+    <div class="project-brief" style="margin-top:14px;">
+      ${
+        includeTargets
+          ? `<div class="field"><label>男主角目标</label><select class="select" data-remix-groom-target>${remixTargetOptions(project?.remixTargets?.groom || "left")}</select></div><div class="field"><label>女主角目标</label><select class="select" data-remix-bride-target>${remixTargetOptions(project?.remixTargets?.bride || "right")}</select></div>`
+          : ""
+      }
+      <div class="field"><label>批量总数</label><select class="select" data-batch-count><option value="12">12 张</option><option value="24" selected>24 张</option><option value="36">36 张</option><option value="48">48 张</option></select></div>
+      <div class="field"><label>每张确认单价</label><input class="input" type="number" min="0" step="0.0001" data-batch-unit-cost placeholder="模型中心未配置时请填写" /></div>
+    </div>
+    <div class="remix-shot-picker">
+      ${shots.length ? shots.map((shot) => `<label><input type="checkbox" data-batch-shot value="${shot.id}" checked /><span>${String(shot.order || shot.number).padStart(2, "0")} · ${esc(shot.title || "婚礼镜头")}</span></label>`).join("") : `<p class="small muted">${esc(emptyMessage)}</p>`}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+      <button class="button secondary" data-action="estimate-image-batch">预估费用</button>
+      <span class="small muted">默认 24 张，可选 12 / 24 / 36 / 48 张</span>
+    </div>
+    ${remixBatchEstimate ? `<div class="remix-estimate"><strong>${esc(remixBatchEstimate.confirmationText)}</strong><small>${remixBatchEstimate.requiresQuote ? "未填写单价，不能提交" : "确认后可创建幂等批量任务"}</small></div>` : ""}
+    <label class="check-item" style="margin-top:12px;"><input type="checkbox" data-batch-confirm /><div class="check-copy"><strong>我已确认模型、数量和费用</strong><small>任务不会自动重复提交。</small></div></label>
+    <button class="button primary" style="width:100%;margin-top:12px;" data-action="submit-image-batch" ${hasIdentities && shots.length && imageModel ? "" : "disabled"}>${icon("sparkle")}${remixBatchJobId ? "提交另一批候选" : "提交批量生图"}</button>
+  </section>`;
+}
+
 function remixStepContent(number) {
   const template = currentRemixTemplate();
   const project = runtime.projects.find((item) => item.id === currentProjectId);
@@ -1681,8 +1782,8 @@ function remixStepContent(number) {
   const videoModel = defaultModel("video");
   const roleImageAssets = runtime.assets.filter(
     (asset) =>
-      asset.projectId === currentProjectId &&
-      ["image", "look-image"].includes(asset.kind)
+      (asset.projectId || asset.ownerId) === currentProjectId &&
+      ["batch-image", "image", "look-image"].includes(asset.kind)
   );
 
   if (number === 1) {
@@ -1764,7 +1865,7 @@ function remixStepContent(number) {
         <label class="check-item" style="margin-top:12px;"><input type="checkbox" data-batch-confirm /><div class="check-copy"><strong>我已确认模型、数量和费用</strong><small>任务不会自动重复提交。</small></div></label>
         <button class="button primary" style="width:100%;margin-top:12px;" data-action="submit-image-batch" ${hasIdentities && remixShots.length && imageModel ? "" : "disabled"}>${icon("sparkle")}${remixBatchJobId ? "提交另一批候选" : "提交批量生图"}</button>
       </section>
-      <section class="card card-pad"><div class="section-title"><div><h3>角色图候选</h3><p>生成和上传结果都进入当前项目资产库</p></div><span class="badge gold">${roleImageAssets.length} 张</span></div>${renderImageAssets(roleImageAssets.slice(0, 24))}</section>
+      <section class="card card-pad"><div class="section-title"><div><h3>角色图候选</h3><p>批准候选后才能绑定为镜头首帧；淘汰项保留追溯记录</p></div><span class="badge gold">${currentBatchImageAssets().length} 张</span></div>${renderBatchImageResults(currentBatchImageAssets().slice(0, 48))}</section>
     </div>`;
   }
 
@@ -2083,7 +2184,7 @@ function shotImageWorkbench(stepNumber, candidateShots, selected) {
     ]
   ];
   const imageAssets = runtime.assets.filter((asset) =>
-    ["image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
+    ["batch-image", "image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
   );
   const imageReview = shot.imageReview || {};
   const prompt =
@@ -2129,7 +2230,7 @@ function workflowStepContent(number) {
   const voiceAssets = runtime.assets.filter((asset) => asset.kind === "voice" && asset.url);
   const musicAssets = runtime.assets.filter((asset) => asset.kind === "music" && asset.url);
   const imageAssets = runtime.assets.filter((asset) =>
-    ["image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
+    ["batch-image", "image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
   );
   const videoAssets = runtime.assets.filter((asset) => asset.kind === "video" && asset.url);
   const exports = runtime.assets.filter((asset) => asset.kind === "export" && asset.url);
@@ -2258,12 +2359,19 @@ function workflowStepContent(number) {
       </div>
       ${shotImageWorkbench(7, imageCandidateShots, selectedImageShot)}`,
     8: `
-      <div class="content-grid">
-        <section class="card card-pad"><div class="section-title"><div><h2>剩余分镜图片</h2><p>按镜号生成，不批量盲出图</p></div><span class="badge gold">${imageAssets.length} 张</span></div><button class="button primary" data-route="generate">进入图片生成中心</button></section>
-        <section class="card card-pad"><div class="section-title"><div><h3>图片检查</h3><p>脸、手、服装、时代和构图</p></div></div><div class="checklist"><div class="check-item"><span class="check-icon pending">1</span><div class="check-copy"><strong>同一张脸</strong><small>跨镜保持五官比例与发际线</small></div></div><div class="check-item"><span class="check-icon pending">2</span><div class="check-copy"><strong>正确手部</strong><small>牵手动作不得粘连或增指</small></div></div><div class="check-item"><span class="check-icon pending">3</span><div class="check-copy"><strong>服装连续</strong><small>每镜绑定明确造型资产</small></div></div></div></section>
+      <div class="stack">
+        ${renderBatchImageWorkbench({
+          shots: imageCandidateShots,
+          includeTargets: false,
+          emptyMessage: "先在第 6 步建立分镜，才能批量生成镜头图片。"
+        })}
+        <section class="card card-pad">
+          <div class="section-title"><div><h3>批量候选审核</h3><p>比较身份、手部、服装、时代和构图后再绑定首帧</p></div><span class="badge gold">${currentBatchImageAssets().length} 张</span></div>
+          ${renderBatchImageResults(currentBatchImageAssets().slice(0, 48))}
+        </section>
       </div>
       ${shotImageWorkbench(8, imageCandidateShots, selectedImageShot)}
-      ${renderImageAssets(imageAssets.slice(0,12))}`,
+      ${renderImageAssets(imageAssets.slice(0, 12))}`,
     9: `
       <div class="content-grid">
         <section class="card card-pad">
@@ -4100,6 +4208,64 @@ async function handleAction(button) {
     remixBatchJobId = result.job.id;
     await trackJob(result.job.id, "批量角色图生成");
     await refreshRuntime();
+  }
+  if (action === "review-batch-image") {
+    const assetId = button.dataset.assetId;
+    const reviewStatus = button.dataset.reviewStatus;
+    if (!assetId || !["approved", "rejected"].includes(reviewStatus)) return;
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    await api.updateProject(currentProjectId, {
+      batchImageReviews: {
+        ...(project?.batchImageReviews || {}),
+        [assetId]: reviewStatus
+      }
+    });
+    await refreshRuntime();
+    showToast(reviewStatus === "approved" ? "候选图已批准，可绑定为镜头首帧" : "候选图已淘汰");
+  }
+  if (action === "bind-batch-image") {
+    const asset = currentBatchImageAssets().find(
+      (item) => item.id === button.dataset.assetId
+    );
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    const job = asset ? batchJobForAsset(asset) : null;
+    const shotId = job?.input?.shotId || "";
+    const reviewStatus = project?.batchImageReviews?.[asset?.id];
+    if (!asset || !shotId) {
+      showToast("当前候选图没有绑定镜头，不能设为首帧");
+      return;
+    }
+    if (reviewStatus !== "approved") {
+      showToast("请先批准候选图，再绑定为镜头首帧");
+      return;
+    }
+    const sourceShots =
+      activeRouteInfo.mode === "remix"
+        ? project?.remixStoryboard || storyboard
+        : project?.storyStoryboard || storyboard;
+    const shot = sourceShots.find((item) => item.id === shotId);
+    if (!shot) {
+      showToast("候选图对应的镜头已不存在");
+      return;
+    }
+    await api.updateShot(currentProjectId, shotId, {
+      mode: activeRouteInfo.mode || "story",
+      imagePrompt: shot.imagePrompt || "",
+      assets: {
+        ...(shot.assets || {}),
+        firstFrame: {
+          assetId: asset.id,
+          hash: asset.contentHash || ""
+        },
+        video: null,
+        finalClip: null
+      },
+      imageStatus: "review",
+      imageReview: {},
+      status: "draft"
+    });
+    await refreshRuntime();
+    showToast("候选图已绑定为本镜首帧，请继续完成首帧人工审核");
   }
   if (action === "save-remix-props") {
     const sourceAssetId =

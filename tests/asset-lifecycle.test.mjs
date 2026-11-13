@@ -41,6 +41,7 @@ test("素材引用检查能识别项目镜头、模板与任务记录", () => {
 
 test("未被引用的图片和视频可进入删除流程，音频不会误删", () => {
   assert.equal(isVisualAsset({ kind: "project-photo" }), true);
+  assert.equal(isVisualAsset({ kind: "batch-image" }), true);
   assert.equal(isVisualAsset({ kind: "preview" }), true);
   assert.equal(isVisualAsset({ kind: "music" }), false);
   assert.equal(

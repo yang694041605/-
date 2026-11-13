@@ -33,6 +33,13 @@ test("图片与视频提示词分属第 7-9 步", () => {
   assert.equal(getWorkflowStep(10).promptKinds.includes("video"), false);
 });
 
+test("第 8 步包含确认费用后的批量分镜生图能力", () => {
+  const step = getWorkflowStep(8);
+  assert.ok(step.actions.some((action) => /12\/24\/36\/48/.test(action)));
+  assert.ok(step.actions.some((action) => /确认费用/.test(action)));
+  assert.ok(step.actions.some((action) => /批量任务/.test(action)));
+});
+
 test("缺口计算会返回具体输入名称", () => {
   const step = getWorkflowStep(6);
   const gaps = workflowStepGaps(step, {

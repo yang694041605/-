@@ -42,6 +42,7 @@ export function findAssetReferences(asset, recordGroups = []) {
 
 const VISUAL_ASSET_KINDS = new Set([
   "image",
+  "batch-image",
   "look-image",
   "photo",
   "project-photo",

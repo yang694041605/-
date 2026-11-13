@@ -98,7 +98,7 @@ const rawSpecs = [
     goal: "保证每个镜头都有符合身份和服装连续性的图片版本。",
     requiredInputs: ["全部分镜", "已通过重点首帧", "造型库", "场景参考"],
     inputKeys: ["shots", "keyStills", "looks", "sceneReferences"],
-    actions: ["按镜生成图片提示词", "逐镜生成或上传", "比较多个版本", "单镜返工"],
+    actions: ["按镜生成图片提示词", "选择 12/24/36/48 张候选", "确认费用后提交批量任务", "比较版本并绑定首帧"],
     outputs: ["每镜首帧", "图片选择记录"],
     checks: ["每镜都有图片", "脸和服装一致", "不得存在未绑定镜头的图片"],
     promptKinds: ["image"]
