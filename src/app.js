@@ -569,7 +569,7 @@ const REMIX_GUIDES = [
   },
   {
     inputs: ["男女主角色照片", "明确替换目标", "最多八个连续镜头"],
-    actions: ["指定左侧/右侧/人物编号", "生成每镜提示词", "逐镜生成或上传视频", "八项人工质检"],
+    actions: ["指定左侧/右侧/人物编号", "生成每镜提示词", "逐镜生成或上传视频", "九项人工质检"],
     outputs: ["每镜替换视频", "首帧与提示词版本", "人工审核记录"],
     checks: ["不是同一人物目标", "身份、手部、动作、背景通过", "每镜绑定最终片段"]
   },
@@ -1674,6 +1674,7 @@ function remixStepContent(number) {
       ["crossFace", "无串脸"],
       ["hands", "手部正确"],
       ["actionMatch", "动作匹配"],
+      ["prop", "道具接触"],
       ["backgroundDrift", "背景稳定"],
       ["blackBars", "无黑边"],
       ["subtitleSafety", "字幕安全"],
@@ -1942,6 +1943,7 @@ function shotQcCard(shot, mode = "story") {
     ["crossFace", "无串脸"],
     ["hands", "手部正确"],
     ["actionMatch", "动作匹配"],
+    ["prop", "道具接触"],
     ["backgroundDrift", "背景稳定"],
     ["blackBars", "无黑边"],
     ["subtitleSafety", "字幕安全"],
@@ -3922,7 +3924,7 @@ async function handleAction(button) {
       status: passed ? "approved" : "human-review"
     });
     await refreshRuntime();
-    showToast(passed ? "本镜八项人工质检已通过" : "本镜仍有质检项未通过");
+    showToast(passed ? "本镜九项人工质检已通过" : "本镜仍有质检项未通过");
   }
   if (action === "build-shot-image-prompt") {
     const shot = storyboard.find((item) => item.id === button.dataset.shotId);

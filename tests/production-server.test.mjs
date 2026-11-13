@@ -23,6 +23,7 @@ function approvedReview() {
     crossFace: "passed",
     hands: "passed",
     actionMatch: "passed",
+    prop: "passed",
     backgroundDrift: "passed",
     blackBars: "passed",
     subtitleSafety: "passed",
@@ -152,7 +153,7 @@ test("成片时间线拒绝素材哈希变化", () => {
   );
 });
 
-test("质检八项全部通过才符合镜头交付条件", () => {
+test("质检九项全部通过才符合镜头交付条件", () => {
   assert.equal(shotReviewComplete(approvedReview()), true);
   assert.equal(shotReviewComplete({ ...approvedReview(), crossFace: "failed" }), false);
 });

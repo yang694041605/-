@@ -139,12 +139,13 @@ test("审批指纹变化后旧确认立即失效", () => {
   );
 });
 
-test("镜头八项人工质检全部通过后才可交付", () => {
+test("镜头九项人工质检全部通过后才可交付", () => {
   const review = {
     identity: "passed",
     crossFace: "passed",
     hands: "passed",
     actionMatch: "passed",
+    prop: "passed",
     backgroundDrift: "passed",
     blackBars: "passed",
     subtitleSafety: "passed",

@@ -67,6 +67,16 @@ export const api = {
         body: file
       }
     ),
+  importReplacementVideo: async (projectId, shotId, file) =>
+    request(
+      `/api/projects/${encodeURIComponent(projectId)}/shots/${encodeURIComponent(
+        shotId
+      )}/import-video?name=${encodeURIComponent(file.name)}`,
+      {
+        method: "POST",
+        body: file
+      }
+    ),
   uploadAsset: async (file, { kind = "project-photo", projectId = "", title = "" } = {}) =>
     request(
       `/api/assets/upload?kind=${encodeURIComponent(kind)}&projectId=${encodeURIComponent(

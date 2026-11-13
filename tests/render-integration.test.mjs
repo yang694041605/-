@@ -24,6 +24,7 @@ function review() {
     "crossFace",
     "hands",
     "actionMatch",
+    "prop",
     "backgroundDrift",
     "blackBars",
     "subtitleSafety",

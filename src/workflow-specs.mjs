@@ -111,7 +111,7 @@ const rawSpecs = [
     goal: "把每张批准首帧变成动作连续、身份稳定的视频镜头。",
     requiredInputs: ["每镜首帧", "图片提示词", "视频提示词", "视频模型"],
     inputKeys: ["firstFrames", "imagePrompts", "videoPrompts", "videoModel"],
-    actions: ["生成视频提示词", "绑定首帧", "逐镜生成视频", "播放检查", "八项人工质检"],
+    actions: ["生成视频提示词", "绑定首帧", "逐镜生成视频", "播放检查", "九项人工质检"],
     outputs: ["每镜视频", "视频提示词版本", "质检记录"],
     checks: ["身份一致", "无串脸", "手部正确", "动作匹配", "背景稳定", "字幕安全", "音画同步", "无黑边"],
     promptKinds: ["video"]

@@ -256,6 +256,7 @@ test("完整 1-14 步可以生成预览和交付包", { timeout: 180000 }, async
           crossFace: "passed",
           hands: "passed",
           actionMatch: "passed",
+          prop: "passed",
           backgroundDrift: "passed",
           blackBars: "passed",
           subtitleSafety: "passed",

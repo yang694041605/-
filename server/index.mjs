@@ -70,6 +70,11 @@ import {
 import { buildStoredRemixReport } from "../src/remix-report.mjs";
 import { buildImagePrompt } from "../src/prompt-library.mjs";
 import {
+  bindImportedVideo,
+  normalizeReplacementMap,
+  validateReplacementClip
+} from "../src/replacement-map.mjs";
+import {
   buildFrameExtractionPlan,
   buildRemixShotPlan,
   extractRemixFrames,
@@ -595,7 +600,7 @@ async function handleApi(request, response, url) {
     ) {
       return sendJson(response, 409, {
         ok: false,
-        error: "八项人工质检未全部通过，不能把镜头标记为已批准"
+        error: "九项人工质检未全部通过，不能把镜头标记为已批准"
       });
     }
     const storyboard = sourceStoryboard.slice();
@@ -611,6 +616,110 @@ async function handleApi(request, response, url) {
       ok: true,
       item: storyboard[index],
       project: updated
+    });
+  }
+
+  const importVideoMatch = path.match(
+    /^\/api\/projects\/([^/]+)\/shots\/([^/]+)\/import-video$/
+  );
+  if (importVideoMatch && method === "POST") {
+    const project = getEntity("project", importVideoMatch[1]);
+    if (!project) {
+      return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    }
+    const sourceStoryboard = Array.isArray(project.remixStoryboard) &&
+      project.remixStoryboard.length
+      ? project.remixStoryboard
+      : project.mode === "remix" && Array.isArray(project.storyboard)
+        ? project.storyboard
+        : [];
+    const shotId = decodeURIComponent(importVideoMatch[2]);
+    const shotIndex = sourceStoryboard.findIndex((shot) => shot.id === shotId);
+    if (shotIndex < 0) {
+      return sendJson(response, 404, { ok: false, error: "镜头不存在" });
+    }
+    const shot = sourceStoryboard[shotIndex];
+    let mapping;
+    try {
+      mapping = normalizeReplacementMap({
+        groom: {
+          target:
+            project.remixTargets?.groom ||
+            shot.characters?.groom?.target,
+          sourceAssetId:
+            project.photoAssetIds?.groom ||
+            shot.characters?.groom?.referenceAssetId
+        },
+        bride: {
+          target:
+            project.remixTargets?.bride ||
+            shot.characters?.bride?.target,
+          sourceAssetId:
+            project.photoAssetIds?.bride ||
+            shot.characters?.bride?.referenceAssetId
+        },
+        props: project.remixProps || []
+      });
+    } catch (error) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: safeError(error)
+      });
+    }
+    const requiredAssetIds = [
+      mapping.groom.sourceAssetId,
+      mapping.bride.sourceAssetId,
+      ...mapping.props.map((item) => item.sourceAssetId).filter(Boolean)
+    ];
+    const missingAssetId = requiredAssetIds.find(
+      (assetId) => !getEntity("asset", assetId)
+    );
+    if (missingAssetId) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: `替换参考素材不存在：${missingAssetId}`
+      });
+    }
+    const asset = await receiveUpload(request, {
+      kind: "video",
+      ownerId: project.id,
+      preferredName:
+        url.searchParams.get("name") || "replacement.mp4"
+    });
+    let validation;
+    try {
+      validation = validateReplacementClip({
+        shot,
+        asset,
+        mapping,
+        aspect: project.aspect || "16:9"
+      });
+    } catch (error) {
+      deleteEntity("asset", asset.id);
+      await rm(asset.localPath, { force: true }).catch(() => {});
+      return sendJson(response, 400, {
+        ok: false,
+        error: safeError(error)
+      });
+    }
+    const nextStoryboard = sourceStoryboard.slice();
+    nextStoryboard[shotIndex] = bindImportedVideo(
+      shot,
+      asset,
+      mapping
+    );
+    const updated = updateEntity("project", project.id, {
+      mode: "remix",
+      storyboard: nextStoryboard,
+      remixStoryboard: nextStoryboard,
+      timelineRevision: Number(project.timelineRevision || 1) + 1
+    });
+    return sendJson(response, 201, {
+      ok: true,
+      item: updated,
+      shot: nextStoryboard[shotIndex],
+      asset,
+      validation
     });
   }
 

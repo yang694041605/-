@@ -7,6 +7,7 @@ export const REVIEW_CHECKS = [
   "crossFace",
   "hands",
   "actionMatch",
+  "prop",
   "backgroundDrift",
   "blackBars",
   "subtitleSafety",

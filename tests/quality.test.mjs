@@ -27,6 +27,7 @@ test("技术检查通过不等于人工审核通过", () => {
       crossFace: "passed",
       hands: "passed",
       actionMatch: "passed",
+      prop: "passed",
       backgroundDrift: "passed",
       blackBars: "passed",
       subtitleSafety: "passed",
