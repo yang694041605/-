@@ -306,6 +306,7 @@ git commit -m "feat: add structured remix reports and prompt formats"
 - Create: `server/generation-estimate.mjs`
 - Create: `tests/generation-estimate.test.mjs`
 - Modify: `server/model-registry.mjs`
+- Modify: `server/db.mjs`
 - Modify: `server/index.mjs`
 - Modify: `src/api.js`
 
@@ -402,6 +403,23 @@ Add these exact registry entries:
 }
 ```
 
+Add this default model to `server/db.mjs`:
+
+```js
+{
+  id: "model-transcription-whisper",
+  category: "transcription",
+  provider: "whisper-local",
+  profile: "",
+  model: "whisper-local",
+  label: "本地 Whisper 转写",
+  enabled: true,
+  isDefault: true,
+  status: "ready",
+  parameters: { language: "zh" }
+}
+```
+
 Register the route in `server/index.mjs`:
 
 ```js
@@ -431,7 +449,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add server/generation-estimate.mjs server/model-registry.mjs server/index.mjs src/api.js tests/generation-estimate.test.mjs
+git add server/generation-estimate.mjs server/model-registry.mjs server/db.mjs server/index.mjs src/api.js tests/generation-estimate.test.mjs
 git commit -m "feat: add generation estimates and transcription capability"
 ```
 
