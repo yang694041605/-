@@ -31,6 +31,7 @@ test("导航属于婚礼微电影业务且不存在旧通用模块", () => {
     assert.match(text, new RegExp(keyword));
   }
   assert.doesNotMatch(text, /传统教学|成绩单|试卷/);
+  assert.doesNotMatch(text, /VVV|Remotion/);
 });
 
 test("级联路径可以完整追踪到父亲节点", () => {

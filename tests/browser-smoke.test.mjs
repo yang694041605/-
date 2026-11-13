@@ -91,7 +91,7 @@ async function waitForJson(url, attempts = 100) {
   throw new Error(`无法连接浏览器调试端口：${url}`);
 }
 
-async function openCdpPage(browser, url) {
+async function openCdpPageOnce(browser, url) {
   const port = 6200 + Math.floor(Math.random() * 500);
   const child = spawn(
     browser,
@@ -158,6 +158,19 @@ async function openCdpPage(browser, url) {
     child.kill();
     throw error;
   }
+}
+
+async function openCdpPage(browser, url) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await openCdpPageOnce(browser, url);
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 300));
+    }
+  }
+  throw lastError;
 }
 
 async function waitForBrowser(evaluate, expression, timeout = 8000) {

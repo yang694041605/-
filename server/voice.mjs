@@ -2,54 +2,6 @@ import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-export function runPython(args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const command = process.env.PYTHON_PATH || "python";
-    const child = spawn(command, args, {
-      ...options,
-      windowsHide: true
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve({ stdout, stderr });
-      else {
-        const error = new Error(stderr || `python exited with code ${code}`);
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
-      }
-    });
-  });
-}
-
-export async function synthesizeVoice({ text, voice, outputPath, rate = "-5%" }) {
-  await mkdir(dirname(outputPath), { recursive: true });
-  await runPython(
-    [
-      "-m",
-      "edge_tts",
-      "--voice",
-      voice || "zh-CN-XiaoxiaoNeural",
-      "--rate",
-      rate || "-5%",
-      "--text",
-      text,
-      "--write-media",
-      outputPath
-    ],
-    { cwd: process.cwd() }
-  );
-  return outputPath;
-}
-
 export async function synthesizeSapi({ text, voice, outputPath, rate = 0 }) {
   await mkdir(dirname(outputPath), { recursive: true });
   const textPath = `${outputPath}.txt`;

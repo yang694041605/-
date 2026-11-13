@@ -211,18 +211,6 @@ export function seedDefaults() {
         }
       },
       {
-        id: "model-voice-edge",
-        category: "voice",
-        provider: "edge-tts",
-        profile: "",
-        model: "zh-CN-XiaoxiaoNeural",
-        label: "晓晓 · 中文情感旁白",
-        enabled: false,
-        isDefault: false,
-        status: "external_service_blocked",
-        parameters: { rate: "-5%", volume: "+0%", pitch: "+0Hz" }
-      },
-      {
         id: "model-voice-sapi",
         category: "voice",
         provider: "windows-sapi",
@@ -259,18 +247,6 @@ export function seedDefaults() {
         parameters: { tempo: 78, mood: "warm-cinematic" }
       },
       {
-        id: "model-music-beatra",
-        category: "music",
-        provider: "beatra",
-        profile: "",
-        model: "suno-5.5",
-        label: "Beatra / Suno 5.5",
-        enabled: false,
-        isDefault: false,
-        status: "needs_setup",
-        parameters: { instrumental: true }
-      },
-      {
         id: "model-editor-ffmpeg",
         category: "editor",
         provider: "ffmpeg",
@@ -281,18 +257,6 @@ export function seedDefaults() {
         isDefault: true,
         status: "ready",
         parameters: { fps: 24, videoCodec: "libx264", audioCodec: "aac" }
-      },
-      {
-        id: "model-editor-vvv",
-        category: "editor",
-        provider: "vvv-remotion",
-        profile: "",
-        model: "remotion-4.0.534",
-        label: "VVV Remotion · 可编辑工程",
-        enabled: true,
-        isDefault: false,
-        status: "needs_node26",
-        parameters: { defaultTemplate: "starter", format: "16:9" }
       }
     ];
     models.forEach((model) => saveEntity("model", model, model.id));
@@ -315,11 +279,6 @@ export function seedDefaults() {
       },
       "model-voice-sapi"
     );
-    updateEntity("model", "model-voice-edge", {
-      enabled: false,
-      isDefault: false,
-      status: "external_service_blocked"
-    });
   }
 
   if (!getEntity("model", "model-image-pollinations")) {
@@ -338,25 +297,6 @@ export function seedDefaults() {
         parameters: { width: 1024, height: 1365 }
       },
       "model-image-pollinations"
-    );
-  }
-
-  if (!getEntity("model", "model-editor-vvv")) {
-    saveEntity(
-      "model",
-      {
-        id: "model-editor-vvv",
-        category: "editor",
-        provider: "vvv-remotion",
-        profile: "",
-        model: "remotion-4.0.534",
-        label: "VVV Remotion · 可编辑工程",
-        enabled: true,
-        isDefault: false,
-        status: "needs_node26",
-        parameters: { defaultTemplate: "starter", format: "16:9" }
-      },
-      "model-editor-vvv"
     );
   }
 
@@ -434,8 +374,7 @@ export function seedDefaults() {
       photos: { groom: "", bride: "" },
       photoSources: { groom: "", bride: "" },
       selectedLooks: { groom: "", bride: "" },
-      workflow: { currentStep: 1, approvals: {} },
-      vvvStyle: ""
+      workflow: { currentStep: 1, approvals: {} }
     };
     saveEntity("project", project, project.id);
   }

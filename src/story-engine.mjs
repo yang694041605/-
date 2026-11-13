@@ -163,7 +163,6 @@ export function normalizeProject(input = {}) {
       margin: 30
     },
     timelineRevision: Number(input.timelineRevision) || 1,
-    vvvStyle: input.vvvStyle || "",
     story:
       String(input.story || "").trim() ||
       "从第一次相遇到今天，我们把平凡的日常，过成了彼此最重要的故事。",

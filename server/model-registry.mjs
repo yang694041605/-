@@ -31,13 +31,6 @@ export const MODEL_PROVIDERS = [
     fields: ["model", "parameters"]
   },
   {
-    id: "edge-tts",
-    label: "Edge TTS",
-    categories: ["voice"],
-    credential: "external",
-    fields: ["model", "parameters"]
-  },
-  {
     id: "xying-original",
     label: "囍映本地配乐",
     categories: ["music"],
@@ -45,22 +38,8 @@ export const MODEL_PROVIDERS = [
     fields: ["model", "parameters"]
   },
   {
-    id: "beatra",
-    label: "Beatra / Suno",
-    categories: ["music"],
-    credential: "external",
-    fields: ["model", "parameters"]
-  },
-  {
     id: "ffmpeg",
     label: "FFmpeg",
-    categories: ["editor"],
-    credential: "local",
-    fields: ["model", "parameters"]
-  },
-  {
-    id: "vvv-remotion",
-    label: "VVV / Remotion",
     categories: ["editor"],
     credential: "local",
     fields: ["model", "parameters"]

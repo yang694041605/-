@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { runProcess } from "./ark.mjs";
@@ -472,52 +472,6 @@ export async function verifyMedia(filePath) {
   if (!media.video) throw new Error("输出文件没有视频轨道");
   if (media.duration <= 0) throw new Error("输出文件时长无效");
   return media;
-}
-
-export async function runAdvancedMediaCheck(filePath, platform = "youtube") {
-  const candidates = [
-    process.env.FFMPEG_SKILL_ROOT,
-    "C:\\Users\\dell\\.codex\\skills\\ffmpeg-skill",
-    resolve(process.cwd(), "..", "vendor-research", "ffmpeg-skill")
-  ].filter(Boolean);
-  let skillRoot = "";
-  for (const candidate of candidates) {
-    try {
-      await access(resolve(candidate, "scripts", "check.py"));
-      skillRoot = candidate;
-      break;
-    } catch {
-      // Continue searching.
-    }
-  }
-  if (!skillRoot) {
-    return {
-      status: "unavailable",
-      ok: null,
-      warnings: ["ffmpeg-skill 未安装或路径不可用"]
-    };
-  }
-  const script = resolve(skillRoot, "scripts", "check.py");
-  try {
-    const result = await runProcess(
-      process.env.PYTHON_PATH || "python",
-      [script, filePath, "--platform", platform, "--json"],
-      { cwd: skillRoot }
-    );
-    return JSON.parse(result.stdout);
-  } catch (error) {
-    if (error.stdout) {
-      try {
-        return {
-          ...JSON.parse(error.stdout),
-          stderr: error.stderr || ""
-        };
-      } catch {
-        // Fall through to the original failure.
-      }
-    }
-    throw error;
-  }
 }
 
 export function inferExtension(contentType = "", filename = "") {

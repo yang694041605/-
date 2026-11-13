@@ -13,7 +13,7 @@ test("模型中心暴露稳定的类别和供应商能力矩阵", () => {
   assert.ok(schema.providers.some((item) => item.id === "volcengine-ark"));
   assert.ok(schema.providers.some((item) => item.id === "pollinations"));
   assert.ok(MODEL_CATEGORIES.length >= 7);
-  assert.ok(MODEL_PROVIDERS.length >= 7);
+  assert.ok(MODEL_PROVIDERS.length >= 5);
 });
 
 test("新增模型会校验类别、供应商和参数对象", () => {
@@ -93,4 +93,11 @@ test("Provider 字段会按能力矩阵自动收敛", () => {
   assert.equal(normalized.provider, "windows-sapi");
   assert.equal(normalized.parameters.rate, -2);
   assert.equal(normalized.profile, "");
+});
+
+test("模型中心只保留已经落地的核心供应商", () => {
+  assert.deepEqual(
+    MODEL_PROVIDERS.map((provider) => provider.id).sort(),
+    ["ffmpeg", "pollinations", "volcengine-ark", "windows-sapi", "xying-original"]
+  );
 });

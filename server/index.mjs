@@ -40,18 +40,16 @@ import {
   inspectRenderedQuality,
   probeMedia,
   renderTimeline,
-  runAdvancedMediaCheck,
   sceneCutsToShots,
   transcribeWithWhisper,
   verifyMedia
 } from "./media.mjs";
-import { synthesizeSapi, synthesizeVoice } from "./voice.mjs";
+import { synthesizeSapi } from "./voice.mjs";
 import { renderOriginalBgm } from "./bgm.mjs";
 import {
   generatePollinationsImage,
   generatePollinationsText
 } from "./pollinations.mjs";
-import { checkVvv, createVvvProject, findVvvRoot } from "./vvv.mjs";
 import {
   approvalSnapshot,
   approveStep,
@@ -95,6 +93,7 @@ import {
 } from "./asset-lifecycle.mjs";
 
 seedDefaults();
+cleanupRetiredOptionalModels();
 migrateProjectRecords();
 normalizeModelDefaults();
 migrateInterruptedJobs();
@@ -1441,33 +1440,29 @@ async function handleApi(request, response, url) {
   if (path === "/api/voice/generate" && method === "POST") {
     const body = await readJson(request);
     const model = getModelOrDefault(body.modelId, "voice");
-    const extension = model?.provider === "windows-sapi" ? ".wav" : ".mp3";
-    const outputPath = resolve(mediaRoot, "audio", `${id("voice")}${extension}`);
-    await mkdir(resolve(mediaRoot, "audio"), { recursive: true });
-    if (model?.provider === "windows-sapi") {
-      await synthesizeSapi({
-        text: body.text,
-        voice: model.model,
-        outputPath,
-        rate: model.parameters?.rate ?? -1
-      });
-    } else {
-      await synthesizeVoice({
-        text: body.text,
-        voice: model?.model || "zh-CN-XiaoxiaoNeural",
-        outputPath,
-        rate: model?.parameters?.rate || "-5%"
+    if (!model || model.provider !== "windows-sapi") {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "未配置可用的 Windows 本地语音模型"
       });
     }
+    const outputPath = resolve(mediaRoot, "audio", `${id("voice")}.wav`);
+    await mkdir(resolve(mediaRoot, "audio"), { recursive: true });
+    await synthesizeSapi({
+      text: body.text,
+      voice: model.model,
+      outputPath,
+      rate: model.parameters?.rate ?? -1
+    });
     const asset = saveEntity("asset", {
       id: id("asset"),
       kind: "voice",
       title: body.title || "旁白",
       localPath: outputPath,
       url: mediaUrlForPath(outputPath),
-      mimeType: model?.provider === "windows-sapi" ? "audio/wav" : "audio/mpeg",
-      provider: model?.provider || "edge-tts",
-      model: model?.model || "",
+      mimeType: "audio/wav",
+      provider: model.provider,
+      model: model.model,
       projectId: body.projectId || "",
       contentHash: await sha256File(outputPath),
       version: 1
@@ -1544,67 +1539,6 @@ async function handleApi(request, response, url) {
       ok: false,
       error: "旧版路径合成接口已停用，请使用当前项目时间轴合成"
     });
-  }
-
-  if (path === "/api/vvv/project" && method === "POST") {
-    const body = await readJson(request);
-    const root = await findVvvRoot();
-    if (!root) {
-      return sendJson(response, 409, {
-        ok: false,
-        error: "未找到 VVV 模板环境，请设置 VVV_ROOT"
-      });
-    }
-    const photos = (body.assetIds || [])
-      .map((assetId) => getEntity("asset", assetId))
-      .filter(
-        (asset) =>
-          asset?.localPath && /\.(jpg|jpeg|png|webp)$/i.test(asset.localPath)
-      )
-      .map((asset) => asset.localPath);
-    if (photos.length === 0) {
-      return sendJson(response, 400, {
-        ok: false,
-        error: "创建 VVV 工程至少需要一张婚礼照片"
-      });
-    }
-    const outputRoot = resolve(mediaRoot, "vvv-projects", id("vvv"));
-    const project = getEntity("project", body.projectId);
-    const created = await createVvvProject({
-      root,
-      template: body.template || "starter",
-      format: body.format || "16:9",
-      photos,
-      outputDir: outputRoot,
-      allowRepeat: Boolean(body.allowRepeat),
-      projectInfo: {
-        name: project?.name || "我们的婚礼",
-        groom: project?.groom || "新郎",
-        bride: project?.bride || "新娘",
-        weddingDate: project?.weddingDate || ""
-      }
-    });
-    const asset = saveEntity("asset", {
-      id: id("asset"),
-      kind: "remotion-project",
-      projectId: body.projectId || "",
-      title: `VVV ${body.template || "starter"} 可编辑工程`,
-      localPath: created.projectDir,
-      previewPath: resolve(created.projectDir, "creative", "contact-sheet.jpg"),
-      previewUrl: mediaUrlForPath(
-        resolve(created.projectDir, "creative", "contact-sheet.jpg")
-      ),
-      template: body.template || "starter",
-      format: body.format || "16:9"
-    });
-    return sendJson(response, 201, { ok: true, item: { ...created, asset } });
-  }
-
-  if (path === "/api/vvv/doctor" && method === "GET") {
-    const root = await findVvvRoot();
-    if (!root) return sendJson(response, 409, { ok: false, error: "未找到 VVV" });
-    const result = await checkVvv(root);
-    return sendJson(response, 200, { ok: true, item: result, root });
   }
 
   if (path === "/api/jobs" && method === "GET") {
@@ -1935,6 +1869,15 @@ function migrateInterruptedJobs() {
         status: "unknown",
         error: "本地服务在任务完成前重启；请核对原任务后明确重新发起"
       });
+    }
+  }
+}
+
+function cleanupRetiredOptionalModels() {
+  const retiredProviders = new Set(["edge-tts", "beatra", "vvv-remotion"]);
+  for (const model of listEntities("model", 1000)) {
+    if (retiredProviders.has(model.provider)) {
+      deleteEntity("model", model.id);
     }
   }
 }
@@ -2565,11 +2508,6 @@ async function renderJob(jobId) {
     subtitleStyle: job.input.subtitleStyle || {}
   });
   const verified = await verifyMedia(outputPath);
-  const advancedCheck = await runAdvancedMediaCheck(outputPath, "youtube").catch((error) => ({
-    status: "failed",
-    ok: false,
-    error: safeError(error)
-  }));
   const technicalQc = await inspectRenderedQuality({
     filePath: outputPath,
     expectedDuration: Number(job.input.duration || verified.duration),
@@ -2609,7 +2547,6 @@ async function renderJob(jobId) {
         timeline: job.input.timeline || null,
         outputPath,
         verifiedMedia: verified,
-        advancedCheck,
         technicalQc,
         createdAt: new Date().toISOString()
       },
@@ -2672,7 +2609,6 @@ async function renderJob(jobId) {
       export: exportEntity,
       asset,
       editProject: editProjectAsset,
-      advancedCheck,
       technicalQc
     }
   });
@@ -2771,9 +2707,6 @@ async function testModel(model) {
       const result = await runProcess("ffmpeg", ["-version"]);
       return { ok: true, message: result.stdout.split("\n")[0] };
     }
-    if (model.provider === "edge-tts") {
-      return { ok: true, message: "Edge TTS 配置已就绪，生成时验证网络与音色" };
-    }
     if (model.provider === "windows-sapi") {
       return { ok: true, message: "Windows 本地中文语音可用" };
     }
@@ -2787,22 +2720,6 @@ async function testModel(model) {
           model.category === "text"
             ? "Pollinations GPT-OSS 20B 文字引擎已配置"
             : "Pollinations FLUX 免费图片引擎已配置"
-      };
-    }
-    if (model.provider === "beatra") {
-      return { ok: false, message: "Beatra 尚未初始化，需要安装并完成账号授权" };
-    }
-    if (model.provider === "vvv-remotion") {
-      const root = await findVvvRoot();
-      if (!root) return { ok: false, message: "未找到 VVV 模板环境" };
-      const result = await checkVvv(root);
-      return {
-        ok: result.status === "passed",
-        message:
-          result.status === "passed"
-            ? "VVV / Remotion 模板环境可用；Node 版本差异会在渲染时提示"
-            : "VVV 检查未通过",
-        details: result
       };
     }
     return { ok: false, message: "未知模型供应商" };

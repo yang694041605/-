@@ -67,8 +67,7 @@ const DEFAULT_PROJECT = {
   workflow: {
     currentStep: 1,
     approvals: {}
-  },
-  vvvStyle: ""
+  }
 };
 
 const LEGACY_NAV_TREE = [
@@ -599,65 +598,6 @@ function buildRemixNavigationChildren(number) {
   }));
 }
 
-const VVV_STYLE_PRESETS = [
-  {
-    id: "album",
-    title: "Album · 现代留白圆角画册",
-    format: "16:9 / 9:16",
-    description: "圆角画册式故事页，按情绪段落组织照片，适合完整爱情故事。",
-    image: "./public/vvv-templates/album.jpg"
-  },
-  {
-    id: "dv-story",
-    title: "DV Story · 我们的故事",
-    format: "16:9",
-    description: "DV 取景框、打字字幕和胶片条，适合校园与成长记忆。",
-    image: "./public/vvv-templates/dv-story.jpg"
-  },
-  {
-    id: "comedy",
-    title: "Comedy · 婚礼喜剧开场",
-    format: "16:9",
-    description: "轻松热场、反转和宾客互动，适合宴会开场。",
-    image: "./public/vvv-templates/comedy.jpg"
-  },
-  {
-    id: "doodle",
-    title: "Doodle · 手绘我们结婚啦",
-    format: "16:9",
-    description: "白纸手绘与照片穿插，轻松温柔。",
-    image: "./public/vvv-templates/doodle.jpg"
-  },
-  {
-    id: "starter",
-    title: "Starter · 节拍相册",
-    format: "16:9 / 9:16",
-    description: "短平快的婚礼照片卡点片，适合快速出片和竖屏传播。",
-    image: "./public/vvv-templates/starter.jpg"
-  },
-  {
-    id: "editorial",
-    title: "Editorial · 简约杂志",
-    format: "16:9",
-    description: "白色杂志版面、手写标题和诗句式文案。",
-    image: "./public/vvv-templates/editorial.jpg"
-  },
-  {
-    id: "cinema",
-    title: "Cinema · 黑幕影院开场",
-    format: "16:9",
-    description: "适合婚宴大屏的影院开场、日期线与成长照片。",
-    image: "./public/vvv-templates/cinema.jpg"
-  },
-  {
-    id: "memoir",
-    title: "Memoir · 手写胶片故事",
-    format: "16:9",
-    description: "手写、胶片、家书和人生章节，适合长篇婚礼开场。",
-    image: "./public/vvv-templates/memoir.jpg"
-  }
-];
-
 const WEDDING_REFERENCE_IMAGES = {
   ancientBride: "./public/wedding-assets/ancient-bride-reference.jpg",
   ancientCouple: "./public/wedding-assets/ancient-courtyard-couple.jpg",
@@ -781,8 +721,7 @@ function saveState({ quiet = false } = {}) {
           remixTargets: state.remixTargets,
           remixRange: state.remixRange,
           musicLicense: state.musicLicense,
-          subtitleStyle: state.subtitleStyle,
-          vvvStyle: state.vvvStyle
+          subtitleStyle: state.subtitleStyle
         })
         .catch(() => {});
     }
@@ -863,8 +802,7 @@ async function refreshRuntime({ rerender = true } = {}) {
         remixRange: project.remixRange || state.remixRange,
         musicLicense: project.musicLicense ?? state.musicLicense,
         subtitleStyle: project.subtitleStyle || state.subtitleStyle,
-        timelineRevision: project.timelineRevision || state.timelineRevision,
-        vvvStyle: project.vvvStyle || state.vvvStyle
+        timelineRevision: project.timelineRevision || state.timelineRevision
       });
       treatment = buildStoryTreatment(state);
       storyboard = buildStoryboard(state);
@@ -2385,29 +2323,6 @@ function templatesPage() {
               </div>`
             : `<div class="empty-state"><div><div class="empty-state-symbol">模</div><h3>还没有模板</h3><p>上传视频或粘贴抖音链接后，系统会建立可编辑的模板配方。</p></div></div>`
         }
-      </section>
-      <section class="card card-pad" style="margin-top:18px;">
-        <div class="section-title">
-          <div><h2>VVV · Remotion 可编辑模板库</h2><p>8 个开源婚礼模板，预览来自 actionow-ai/vvv，MIT 许可；本项目记录其风格参数，完整 Remotion 工程由外部 VVV 路由生成。</p></div>
-          <span class="badge gold">可编辑工程</span>
-        </div>
-        <div class="asset-grid">
-          ${VVV_STYLE_PRESETS.map(
-            (preset) => `
-            <article class="asset-card card">
-              <div class="asset-preview"><img src="${preset.image}" alt="${esc(preset.title)}" /></div>
-              <div class="asset-info">
-                <strong>${esc(preset.title)}</strong>
-                <small>${esc(preset.format)} · ${esc(preset.description)}</small>
-                <div style="display:flex;gap:6px;margin-top:10px;">
-                  <button class="button secondary small-button" data-action="use-vvv-style" data-vvv-id="${preset.id}">套用风格参数</button>
-                  <button class="button ghost small-button" data-action="create-vvv-project" data-vvv-id="${preset.id}">生成可编辑工程</button>
-                </div>
-              </div>
-            </article>`
-          ).join("")}
-        </div>
-        <div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>许可说明</strong>VVV 代码与模板采用 MIT；预览媒体按 VVV 的 MEDIA_LICENSE 使用。应用内的 Final Cut 渲染仍由本地 FFmpeg 完成，不把外部模板伪装为已生成工程。</div></div>
       </section>
     </div>
   `;
@@ -4397,53 +4312,6 @@ async function handleAction(button) {
     saveState({ quiet: true });
     render();
     showToast("模板已应用，项目时长保持不变，参考片时长单独记录");
-  }
-  if (action === "use-vvv-style") {
-    const preset = VVV_STYLE_PRESETS.find((item) => item.id === button.dataset.vvvId);
-    if (!preset) return;
-    state.vvvStyle = preset.id;
-    saveState({ quiet: true });
-    render();
-    showToast(`已记录 VVV 风格：${preset.title}`);
-  }
-  if (action === "create-vvv-project") {
-    const preset = VVV_STYLE_PRESETS.find((item) => item.id === button.dataset.vvvId);
-    const photoAssets = runtime.assets.filter(
-      (asset) => asset.kind === "project-photo" && asset.localPath
-    );
-    if (!preset || !photoAssets.length) {
-      showToast("请先在素材中心上传至少一张婚礼照片");
-      return;
-    }
-    button.disabled = true;
-    button.textContent = "正在创建 Remotion 工程…";
-    const payload = {
-      projectId: currentProjectId,
-      template: preset.id,
-      format: state.aspect,
-      assetIds: photoAssets.map((asset) => asset.id),
-      allowRepeat: false
-    };
-    let result;
-    try {
-      result = await api.createVvvProject(payload);
-    } catch (error) {
-      if (/INSUFFICIENT_PHOTOS|needs at least/i.test(error.message)) {
-        const allow = window.confirm(
-          "当前照片数量少于该模板最低要求。是否允许重复使用已有照片来生成可编辑工程？"
-        );
-        if (!allow) {
-          button.disabled = false;
-          button.textContent = "生成可编辑工程";
-          return;
-        }
-        result = await api.createVvvProject({ ...payload, allowRepeat: true });
-      } else {
-        throw error;
-      }
-    }
-    await refreshRuntime();
-    showToast(`可编辑工程已创建：${result.item.projectDir}`);
   }
   if (action === "test-model") {
     button.disabled = true;

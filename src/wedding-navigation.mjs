@@ -242,8 +242,7 @@ const templateModelSections = [
   sectionNode("template-section", "婚礼模板库", [
     groupNode("template-import-group", "模板来源", [
       { label: "本地婚礼视频", tasks: ["上传模板", "检查视频信息", "分析切镜"] },
-      { label: "抖音婚礼视频", tasks: ["粘贴抖音链接", "下载视频", "预览原片"] },
-      { label: "VVV 模板", tasks: ["查看模板预览", "套用风格", "创建可编辑工程"] }
+      { label: "抖音婚礼视频", tasks: ["粘贴抖音链接", "下载视频", "预览原片"] }
     ], "templates")
   ]),
   sectionNode("model-section", "模型配置", [

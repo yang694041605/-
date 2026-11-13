@@ -21,8 +21,8 @@ npm start
 - 图片：Seedream 5.0 Pro/Lite，另有 FLUX 免费兜底。
 - 视频：Seedance 2.0 / 2.0 Fast。
 - 视觉理解：Doubao Seed 2.0 Lite。
-- 语音：Windows 本地中文语音、Edge TTS 适配器。
-- 音乐：囍映本地原创配乐，Beatra/Suno 为待配置供应商。
+- 语音：Windows 本地中文语音。
+- 音乐：囍映本地原创配乐。
 - 剪辑：FFmpeg 本地引擎。
 
 模型可在“统一模型中心”中修改模型 ID、Profile、默认项并测试连接。API Key 不进入浏览器、源码或日志。
@@ -43,7 +43,6 @@ arkcli auth login volc-sso
 - 可直接粘贴抖音短链接，系统下载原片、作者和文案后建立模板副本。
 - 模板视频与封面保存在 `data/media/templates/`。
 - 深度画面理解需要可用的视觉模型；模型不可用时仍保留本地镜头切点配方。
-- 内置 8 个 VVV Remotion 婚礼模板预览，可套用风格参数或从婚礼照片创建可编辑 Remotion 工程。
 
 ## 双入口
 
@@ -132,13 +131,12 @@ node scripts/acceptance-render.mjs <照片1> <照片2>
 
 完整 1–14 步使用隔离素材和本地模型执行，覆盖故事审批、逐镜图片审核、逐镜视频审核、BGM、试混、完整混音、字幕预览和交付包。
 
-## 开源技能
+## 核心外部依赖
 
-- `wedding-video-guided-wizard`：五幕故事和 14 步人工确认方法。
-- `vvv`：8 个 Remotion 婚礼模板和可编辑工程。
-- `ffmpeg-skill`：42 个本地媒体工具与交付检查。
-
-详细核验结果见 [开源技能整合说明](docs/开源技能整合说明.md)。
+- `wedding-video-guided-wizard`：保留五幕故事采集方法。
+- `video-copy-extractor`：仅在抖音下载和本地语音转写时调用。
+- 图片生成、视频生成和视觉理解由统一模型中心调用。
+- 剪辑、混音、字幕和交付质检全部使用本项目内置 Node.js + FFmpeg 流程。
 
 抖音参考片的提示词格式、BGM 起点、字幕字体判断和真人替换方法见 [抖音参考片专项分析](docs/抖音参考片专项分析.md)。
 

@@ -96,6 +96,12 @@ test("每个模型类别只有一个默认项", async () => {
   const { child, base, temp } = await startTestServer();
   try {
     const payload = await (await fetch(`${base}/api/models`)).json();
+    assert.equal(
+      payload.items.some((model) =>
+        ["edge-tts", "beatra", "vvv-remotion"].includes(model.provider)
+      ),
+      false
+    );
     const groups = new Map();
     for (const model of payload.items) {
       const current = groups.get(model.category) || [];
