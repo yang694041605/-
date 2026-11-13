@@ -198,7 +198,7 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, {
       ok: true,
       service: "xying-wedding-film-studio",
-      version: "1.0.0",
+      version: "1.1.0",
       arkAuth: {
         loggedIn: Boolean(auth.logged_in),
         method: auth.auth_method || "",

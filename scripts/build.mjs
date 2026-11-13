@@ -15,7 +15,7 @@ await writeFile(
   JSON.stringify(
     {
       name: "囍映 AI 婚礼微电影创作台",
-      version: "1.0.0",
+      version: "1.1.0",
       builtAt: new Date().toISOString(),
       frameRate: 24,
       generationBoundary: "生成通过统一模型中心执行，昂贵任务需用户确认"
