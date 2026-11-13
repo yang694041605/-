@@ -14,7 +14,7 @@ export async function probeMedia(filePath) {
     "-show_entries",
     "format=duration,size,bit_rate",
     "-show_entries",
-    "stream=index,codec_name,codec_type,width,height,r_frame_rate,avg_frame_rate,nb_frames",
+    "stream=index,codec_name,codec_type,width,height,r_frame_rate,avg_frame_rate,nb_frames,sample_rate,channels",
     "-of",
     "json",
     filePath
@@ -154,6 +154,7 @@ export async function renderTimeline({
   musicStart = 0,
   voicePath = "",
   subtitlePath = "",
+  subtitleStyle = {},
   safeFill = true
 }) {
   if (!Array.isArray(clips) || clips.length === 0) {
@@ -256,7 +257,8 @@ export async function renderTimeline({
 
     if (subtitlePath) {
       const escaped = subtitlePath.replaceAll("\\", "/").replaceAll(":", "\\:");
-      const videoFilter = `subtitles='${escaped}':force_style='FontName=Microsoft YaHei,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00101010,BorderStyle=1,Outline=2,Shadow=0,MarginV=30,Alignment=2'`;
+      const style = normalizeSubtitleStyle(subtitleStyle);
+      const videoFilter = `subtitles='${escaped}':force_style='FontName=${style.font},FontSize=${style.fontSize},PrimaryColour=${toAssColor(style.color)},OutlineColour=${toAssColor(style.outlineColor)},BorderStyle=1,Outline=${style.outline},Shadow=0,MarginV=${style.margin},Alignment=2'`;
       const currentMapIndex = args.indexOf("0:v:0");
       if (currentMapIndex >= 0) {
         args.splice(currentMapIndex, 2);
@@ -301,6 +303,24 @@ export async function renderTimeline({
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
+}
+
+export function normalizeSubtitleStyle(style = {}) {
+  return {
+    font: String(style.font || "Microsoft YaHei").replaceAll("'", ""),
+    fontSize: Math.max(16, Math.min(72, Number(style.fontSize) || 24)),
+    color: /^#[0-9a-f]{6}$/i.test(style.color || "") ? style.color : "#FFFFFF",
+    outlineColor: /^#[0-9a-f]{6}$/i.test(style.outlineColor || "")
+      ? style.outlineColor
+      : "#101010",
+    outline: Math.max(0, Math.min(8, Number(style.outline ?? 2))),
+    margin: Math.max(10, Math.min(120, Number(style.margin) || 30))
+  };
+}
+
+export function toAssColor(hex) {
+  const value = String(hex || "#FFFFFF").replace("#", "");
+  return `&H00${value.slice(4, 6)}${value.slice(2, 4)}${value.slice(0, 2)}`;
 }
 
 export function buildSafeFillFilter(width, height, fps, safeFill = true) {

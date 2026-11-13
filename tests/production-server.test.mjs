@@ -175,3 +175,57 @@ test("服务端放行抖音第三步必须要求最多八个镜头全部审核�
   project.storyboard[1].assets.video = null;
   assert.equal(remixWorkflowReady(project, template, fixtureAssets(), 3), false);
 });
+
+test("后续音频和字幕不应让已完成的视频镜头审批失效", () => {
+  const project = fixtureProject();
+  const assets = fixtureAssets();
+  const step9 = approvalSnapshot(project, assets, { mode: "story", step: 9 });
+  const withAudio = [
+    ...assets,
+    { id: "asset-voice", projectId: "project-test", kind: "voice", localPath: "v.wav", contentHash: "voice" },
+    { id: "asset-music", projectId: "project-test", kind: "music", localPath: "m.wav", contentHash: "music" },
+    { id: "asset-srt", projectId: "project-test", kind: "subtitle", localPath: "s.srt", contentHash: "srt" }
+  ];
+  const step9AfterAudio = approvalSnapshot(
+    {
+      ...project,
+      timelineSelection: {
+        voiceAssetId: "asset-voice",
+        musicAssetId: "asset-music",
+        subtitleAssetId: "asset-srt"
+      }
+    },
+    withAudio,
+    { mode: "story", step: 9 }
+  );
+  assert.equal(step9AfterAudio.fingerprint, step9.fingerprint);
+});
+
+test("新增字幕不应让第十二步混音审批失效，但会进入第十三步范围", () => {
+  const project = fixtureProject();
+  project.mixAssetId = "asset-mix";
+  const assets = [
+    ...fixtureAssets(),
+    { id: "asset-mix", projectId: "project-test", kind: "mix", localPath: "mix.wav", contentHash: "mix" },
+    { id: "asset-srt", projectId: "project-test", kind: "subtitle", localPath: "s.srt", contentHash: "srt" }
+  ];
+  const before = approvalSnapshot(project, assets, { mode: "story", step: 12 });
+  const after = approvalSnapshot(
+    {
+      ...project,
+      timelineSelection: { subtitleAssetId: "asset-srt" }
+    },
+    assets,
+    { mode: "story", step: 12 }
+  );
+  const step13 = approvalSnapshot(
+    {
+      ...project,
+      timelineSelection: { subtitleAssetId: "asset-srt" }
+    },
+    assets,
+    { mode: "story", step: 13 }
+  );
+  assert.equal(after.fingerprint, before.fingerprint);
+  assert.notEqual(step13.fingerprint, before.fingerprint);
+});

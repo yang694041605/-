@@ -3371,6 +3371,82 @@ small {
   margin-top: 16px;
 }
 
+.step-production-guide {
+  margin-bottom: 18px;
+  border-color: rgba(169, 23, 28, 0.22);
+}
+
+.step-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.step-guide-column {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.step-guide-column > strong {
+  display: block;
+  margin: 9px 0 10px;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.step-guide-column p {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 7px 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.step-guide-column p span,
+.step-guide-column p b {
+  display: inline-grid;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--red);
+  background: rgba(169, 23, 28, 0.09);
+  font-size: 12px;
+}
+
+.step-guide-column p svg {
+  width: 13px;
+  height: 13px;
+}
+
+.step-guide-index {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--red);
+  background: rgba(169, 23, 28, 0.09);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.nav-depth-4 > .nav-node {
+  margin-left: 12px;
+}
+
+.nav-depth-5 > .nav-node {
+  margin-left: 24px;
+}
+
+.nav-depth-5 .nav-label {
+  white-space: normal;
+  line-height: 1.4;
+}
+
 .danger-text {
   color: #a9171c !important;
 }
@@ -3384,6 +3460,10 @@ small {
     grid-template-columns: 1fr;
   }
 
+  .step-guide-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .model-editor-panel {
     position: static;
   }
@@ -3395,6 +3475,10 @@ small {
   }
 
   .model-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .step-guide-grid {
     grid-template-columns: 1fr;
   }
 }

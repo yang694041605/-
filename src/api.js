@@ -181,6 +181,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  renderMixSample: (projectId, payload = {}) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/mix/sample`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  renderFullMix: (projectId, payload = {}) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/mix/full`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  renderPreview: (projectId, payload = {}) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/preview`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  createDelivery: (projectId, payload = {}) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/delivery`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   createVvvProject: (payload) =>
     request("/api/vvv/project", {
       method: "POST",

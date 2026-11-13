@@ -153,6 +153,15 @@ export function normalizeProject(input = {}) {
     remixWorkflow: input.remixWorkflow || { currentStep: 1, approvals: {} },
     remixTargets: input.remixTargets || {},
     remixRange: input.remixRange || null,
+    musicLicense: input.musicLicense || "",
+    subtitleStyle: input.subtitleStyle || {
+      font: "Microsoft YaHei",
+      fontSize: 24,
+      color: "#FFFFFF",
+      outlineColor: "#101010",
+      outline: 2,
+      margin: 30
+    },
     timelineRevision: Number(input.timelineRevision) || 1,
     vvvStyle: input.vvvStyle || "",
     story:

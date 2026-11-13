@@ -76,6 +76,12 @@ import {
   normalizeModelConfiguration,
   schemaForClient
 } from "./model-registry.mjs";
+import {
+  inspectAudioMix,
+  renderFullMix,
+  renderMixSample
+} from "./post-production.mjs";
+import { createDeliveryPackage } from "./delivery.mjs";
 
 seedDefaults();
 migrateProjectRecords();
@@ -278,7 +284,9 @@ async function handleApi(request, response, url) {
     });
   }
 
-  const projectRenderMatch = path.match(/^\/api\/projects\/([^/]+)\/render-timeline$/);
+  const projectRenderMatch = path.match(
+    /^\/api\/projects\/([^/]+)\/(render-timeline|preview)$/
+  );
   if (projectRenderMatch && method === "POST") {
     const project = getEntity("project", projectRenderMatch[1]);
     if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
@@ -327,10 +335,12 @@ async function handleApi(request, response, url) {
     const voice = resolved.voiceAssets[0];
     const music = resolved.musicAssets[0];
     const subtitle = resolved.subtitleAssets[0];
+    const usingFullMix = voice?.kind === "mix";
     const musicTrack = (timeline.tracks.music || []).find(
       (track) => track.assetId === music?.id
     );
-    const job = createJob("timeline-render", {
+    const previewMode = projectRenderMatch[2] === "preview";
+    const job = createJob(previewMode ? "preview-render" : "timeline-render", {
       projectId: project.id,
       input: {
         title: project.name || "婚礼微电影",
@@ -351,7 +361,8 @@ async function handleApi(request, response, url) {
         musicPath: music?.localPath || "",
         musicStart: Number(musicTrack?.sourceStart || 0),
         subtitlePath: subtitle?.localPath || "",
-        autoMusic: !music,
+        subtitleStyle: project.subtitleStyle || {},
+        autoMusic: !music && !usingFullMix,
         mood: project.musicMood || "warm-cinematic",
         timelineHash: timeline.hash,
         timelineRevision: timeline.revision,
@@ -470,9 +481,24 @@ async function handleApi(request, response, url) {
     const shotId = decodeURIComponent(projectShotMatch[2]);
     const index = sourceStoryboard.findIndex((shot) => shot.id === shotId);
     if (index < 0) return sendJson(response, 404, { ok: false, error: "镜头不存在" });
-    const current = project.storyboard[index];
+    const current = sourceStoryboard[index];
     const patch = {};
-    for (const key of ["status", "assets", "characters", "source", "review", "prompt"]) {
+    for (const key of [
+      "status",
+      "assets",
+      "characters",
+      "source",
+      "review",
+      "prompt",
+      "imagePrompt",
+      "imageStatus",
+      "imageReview",
+      "videoPrompt",
+      "factSource",
+      "transition",
+      "endState",
+      "videoAction"
+    ]) {
       if (body[key] !== undefined) patch[key] = body[key];
     }
     if (body.prompt !== undefined) {
@@ -490,6 +516,41 @@ async function handleApi(request, response, url) {
         hash: sha256Text(text),
         text
       };
+    }
+    if (body.imagePrompt !== undefined) {
+      const text = String(body.imagePrompt || "");
+      patch.imagePrompt = text;
+      patch.imagePromptVersion = {
+        version: Number(current.imagePromptVersion?.version || 1) + 1,
+        hash: sha256Text(text),
+        text
+      };
+    }
+    if (body.videoPrompt !== undefined) {
+      const text = String(body.videoPrompt || "");
+      patch.videoPrompt = text;
+      patch.videoPromptVersion = {
+        version: Number(current.videoPromptVersion?.version || 1) + 1,
+        hash: sha256Text(text),
+        text
+      };
+    }
+    if (patch.imageStatus === "approved") {
+      const review = patch.imageReview || current.imageReview || {};
+      const passed = ["identity", "sameCouple", "hands", "costume", "composition"].every(
+        (key) => review[key] === "passed"
+      );
+      if (
+        !(patch.assets || current.assets)?.firstFrame?.assetId ||
+        !passed ||
+        !review.reviewedBy ||
+        !review.reviewedAt
+      ) {
+        return sendJson(response, 409, {
+          ok: false,
+          error: "首帧图片必须绑定并通过五项人工审核"
+        });
+      }
     }
     if (
       patch.status === "approved" &&
@@ -644,6 +705,241 @@ async function handleApi(request, response, url) {
       ok: true,
       item: updated,
       shots: storyboard
+    });
+  }
+
+  const projectMixSampleMatch = path.match(/^\/api\/projects\/([^/]+)\/mix\/sample$/);
+  if (projectMixSampleMatch && method === "POST") {
+    const project = getEntity("project", projectMixSampleMatch[1]);
+    if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const body = await readJson(request);
+    const voice = selectedProjectAudio(project, "voice");
+    const music = selectedProjectAudio(project, "music");
+    if (!voice || !music) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "试混需要已选定的旁白和音乐"
+      });
+    }
+    const duration = Math.max(3, Math.min(15, Number(body.duration || 10)));
+    const start = Math.max(
+      0,
+      Math.min(
+        Number(project.duration || 40) - duration,
+        Number(body.start ?? Math.max(0, Number(project.duration || 40) * 0.35))
+      )
+    );
+    const mixId = id("mix-sample");
+    const outputPath = resolve(mediaRoot, "mixes", `${mixId}.wav`);
+    await renderMixSample({
+      voicePath: voice.localPath,
+      musicPath: music.localPath,
+      outputPath,
+      start,
+      duration
+    });
+    const metrics = await inspectAudioMix(outputPath);
+    const asset = saveEntity("asset", {
+      id: mixId,
+      kind: "mix-sample",
+      projectId: project.id,
+      title: "配音与 BGM 试混",
+      localPath: outputPath,
+      url: mediaUrlForPath(outputPath),
+      mimeType: "audio/wav",
+      media: metrics,
+      contentHash: await sha256File(outputPath),
+      version: 1,
+      mixSettings: {
+        start,
+        duration,
+        musicGain: 0.38,
+        loudnessTarget: -14,
+        ducking: true
+      }
+    });
+    updateEntity("project", project.id, {
+      mixSampleAssetId: asset.id,
+      mixSettings: asset.mixSettings
+    });
+    return sendJson(response, 201, { ok: true, item: asset });
+  }
+
+  const projectFullMixMatch = path.match(/^\/api\/projects\/([^/]+)\/mix\/full$/);
+  if (projectFullMixMatch && method === "POST") {
+    const project = getEntity("project", projectFullMixMatch[1]);
+    if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const voice = selectedProjectAudio(project, "voice");
+    const music = selectedProjectAudio(project, "music");
+    if (!voice || !music) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "完整混音需要已选定的旁白和音乐"
+      });
+    }
+    const mixId = id("mix");
+    const outputPath = resolve(mediaRoot, "mixes", `${mixId}.wav`);
+    await renderFullMix({
+      voicePath: voice.localPath,
+      musicPath: music.localPath,
+      outputPath,
+      duration: Number(project.duration || 40)
+    });
+    const metrics = await inspectAudioMix(outputPath);
+    const asset = saveEntity("asset", {
+      id: mixId,
+      kind: "mix",
+      projectId: project.id,
+      title: "婚礼微电影完整主混音",
+      localPath: outputPath,
+      url: mediaUrlForPath(outputPath),
+      mimeType: "audio/wav",
+      media: metrics,
+      contentHash: await sha256File(outputPath),
+      version: 1,
+      stems: {
+        voiceAssetId: voice.id,
+        musicAssetId: music.id
+      },
+      mixSettings: {
+        duration: Number(project.duration || 40),
+        musicGain: 0.38,
+        loudnessTarget: -14,
+        truePeakTarget: -1,
+        ducking: true
+      }
+    });
+    updateEntity("project", project.id, {
+      mixAssetId: asset.id,
+      timelineSelection: {
+        ...(project.timelineSelection || {}),
+        fullMixAssetId: asset.id
+      },
+      mixSettings: asset.mixSettings,
+      timelineRevision: Number(project.timelineRevision || 1) + 1
+    });
+    return sendJson(response, 201, { ok: true, item: asset });
+  }
+
+  const projectDeliveryMatch = path.match(/^\/api\/projects\/([^/]+)\/delivery$/);
+  if (projectDeliveryMatch && method === "POST") {
+    const project = getEntity("project", projectDeliveryMatch[1]);
+    if (!project) return sendJson(response, 404, { ok: false, error: "项目不存在" });
+    const body = await readJson(request);
+    const mode = body.mode === "remix" ? "remix" : "story";
+    const projectView = projectForMode(project, mode);
+    const assets = projectAssets(project.id);
+    const requiredStep = mode === "remix" ? 3 : 13;
+    const workflow = mode === "remix" ? project.remixWorkflow : project.workflow;
+    const snapshot = approvalSnapshot(projectView, assets, {
+      mode,
+      step: requiredStep
+    });
+    if (
+      !approvalIsCurrent(workflow?.approvals?.[requiredStep], snapshot)
+    ) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "当前完整预览尚未按最新内容确认，不能生成交付包"
+      });
+    }
+    const preview = assets
+      .filter((asset) => asset.kind === "preview")
+      .sort(
+        (left, right) =>
+          new Date(right.createdAt || 0).getTime() -
+          new Date(left.createdAt || 0).getTime()
+      )[0];
+    if (!preview) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "请先在第 13 步渲染完整带字幕预览"
+      });
+    }
+    const subtitle =
+      assets.find(
+        (asset) =>
+          asset.id === project.timelineSelection?.subtitleAssetId &&
+          asset.kind === "subtitle"
+      ) ||
+      assets.find((asset) => asset.kind === "subtitle" && asset.url) ||
+      null;
+    const editProject = assets
+      .filter(
+        (asset) =>
+          asset.kind === "edit-project" &&
+          (!preview.jobId || asset.jobId === preview.jobId)
+      )
+      .sort(
+        (left, right) =>
+          new Date(right.createdAt || 0).getTime() -
+          new Date(left.createdAt || 0).getTime()
+      )[0];
+    const deliveryId = id("delivery");
+    const created = await createDeliveryPackage({
+      outputDir: resolve(mediaRoot, "deliveries", deliveryId),
+      project: projectView,
+      videoPath: preview.localPath,
+      subtitlePath: subtitle?.localPath || "",
+      editProjectPath: editProject?.localPath || "",
+      technicalQc: preview.technicalQc || {},
+      approval: workflow.approvals[requiredStep]
+    });
+    const manifestAsset = saveEntity("asset", {
+      id: deliveryId,
+      kind: "delivery-package",
+      projectId: project.id,
+      title: `${project.name || "婚礼微电影"} · 正式交付包`,
+      localPath: created.outputDir,
+      url: mediaUrlForPath(created.manifestPath),
+      mimeType: "application/json",
+      manifest: created.manifest,
+      contentHash: await sha256File(created.manifestPath),
+      version: 1,
+      previewAssetId: preview.id
+    });
+    const finalVideoFile = created.manifest.files.find((file) =>
+      file.name.endsWith(".mp4")
+    );
+    let finalExport = null;
+    let finalExportAsset = null;
+    if (finalVideoFile) {
+      finalExport = saveEntity("export", {
+        id: id("export"),
+        projectId: project.id,
+        jobId: preview.jobId || "",
+        title: `${project.name || "婚礼微电影"} · 正式交付`,
+        localPath: finalVideoFile.path,
+        contentHash: finalVideoFile.sha256,
+        version: 1,
+        media: preview.media,
+        technicalQc: preview.technicalQc || {}
+      });
+      finalExportAsset = saveEntity("asset", {
+        id: id("asset"),
+        kind: "export",
+        projectId: project.id,
+        title: finalExport.title,
+        localPath: finalExport.localPath,
+        url: mediaUrlForPath(finalExport.localPath),
+        mimeType: "video/mp4",
+        contentHash: finalExport.contentHash,
+        version: 1,
+        media: preview.media,
+        technicalQc: preview.technicalQc || {}
+      });
+    }
+    updateEntity("project", project.id, {
+      deliveryPackageAssetId: manifestAsset.id,
+      deliveryStatus: "package_created",
+      deliveryCreatedAt: new Date().toISOString()
+    });
+    return sendJson(response, 201, {
+      ok: true,
+      item: manifestAsset,
+      package: created,
+      finalExport,
+      finalAsset: finalExportAsset
     });
   }
 
@@ -1175,6 +1471,18 @@ async function handleApi(request, response, url) {
       contentHash: await sha256File(subtitlePath),
       version: 1
     });
+    if (body.projectId) {
+      const project = getEntity("project", body.projectId);
+      if (project) {
+        updateEntity("project", project.id, {
+          timelineSelection: {
+            ...(project.timelineSelection || {}),
+            subtitleAssetId: asset.id
+          },
+          timelineRevision: Number(project.timelineRevision || 1) + 1
+        });
+      }
+    }
     return sendJson(response, 201, { ok: true, item: asset });
   }
 
@@ -1316,6 +1624,24 @@ async function readJson(request) {
 function projectAssets(projectId) {
   return listEntities("asset", 2000).filter(
     (asset) => asset.projectId === projectId || asset.ownerId === projectId
+  );
+}
+
+function selectedProjectAudio(project, kind) {
+  const assets = projectAssets(project.id);
+  const selection = project.timelineSelection || {};
+  const explicitId =
+    kind === "voice" ? selection.voiceAssetId : selection.musicAssetId;
+  return (
+    assets.find((asset) => asset.id === explicitId) ||
+    assets
+      .filter((asset) => asset.kind === kind)
+      .sort(
+        (left, right) =>
+          new Date(right.updatedAt || 0).getTime() -
+          new Date(left.updatedAt || 0).getTime()
+      )[0] ||
+    null
   );
 }
 
@@ -2188,7 +2514,8 @@ async function renderJob(jobId) {
     musicPath,
     musicStart: job.input.musicStart || 0,
     voicePath: job.input.voicePath || "",
-    subtitlePath: job.input.subtitlePath || ""
+    subtitlePath: job.input.subtitlePath || "",
+    subtitleStyle: job.input.subtitleStyle || {}
   });
   const verified = await verifyMedia(outputPath);
   const advancedCheck = await runAdvancedMediaCheck(outputPath, "youtube").catch((error) => ({
@@ -2229,6 +2556,7 @@ async function renderJob(jobId) {
           autoMusic: job.input.autoMusic !== false
         },
         subtitlePath: job.input.subtitlePath || "",
+        subtitleStyle: job.input.subtitleStyle || null,
         timelineHash: job.input.timelineHash || "",
         timelineRevision: job.input.timelineRevision || 1,
         timeline: job.input.timeline || null,
@@ -2243,20 +2571,23 @@ async function renderJob(jobId) {
     ),
     "utf8"
   );
-  const exportEntity = saveEntity("export", {
-    id: id("export"),
-    projectId: job.projectId,
-    jobId: job.id,
-    title: job.input.title || "婚礼微电影",
-    localPath: outputPath,
-    contentHash: await sha256File(outputPath),
-    version: 1,
-    media: verified,
-    technicalQc
-  });
+  const exportEntity =
+    job.kind === "preview-render"
+      ? null
+      : saveEntity("export", {
+          id: id("export"),
+          projectId: job.projectId,
+          jobId: job.id,
+          title: job.input.title || "婚礼微电影",
+          localPath: outputPath,
+          contentHash: await sha256File(outputPath),
+          version: 1,
+          media: verified,
+          technicalQc
+        });
   const asset = saveEntity("asset", {
     id: id("asset"),
-    kind: "export",
+    kind: job.kind === "preview-render" ? "preview" : "export",
     projectId: job.projectId,
     title: job.input.title || "婚礼微电影",
     localPath: outputPath,
@@ -2268,6 +2599,12 @@ async function renderJob(jobId) {
     version: 1,
     jobId: job.id
   });
+  if (job.kind === "preview-render") {
+    updateEntity("project", job.projectId, {
+      previewAssetId: asset.id,
+      previewCreatedAt: asset.createdAt
+    });
+  }
   const editProjectAsset = saveEntity("asset", {
     id: id("asset"),
     kind: "edit-project",
