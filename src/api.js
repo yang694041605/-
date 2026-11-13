@@ -124,6 +124,11 @@ export const api = {
       body: JSON.stringify(patch)
     }),
   getModels: () => request("/api/models"),
+  estimateGeneration: (payload) =>
+    request("/api/generation/estimate", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   createModel: (model) =>
     request("/api/models", {
       method: "POST",

@@ -3,6 +3,7 @@ export const MODEL_CATEGORIES = [
   { id: "image", label: "图片生成", description: "人物定妆、服装和场景" },
   { id: "video", label: "视频生成", description: "动态镜头、动作与镜头替换" },
   { id: "vision", label: "视觉理解", description: "模板、镜头和参考素材分析" },
+  { id: "transcription", label: "语音识别", description: "参考片口播和时间轴转写" },
   { id: "voice", label: "语音合成", description: "旁白、誓言和角色配音" },
   { id: "music", label: "音乐生成", description: "原创 BGM 与情绪曲线" },
   { id: "editor", label: "剪辑引擎", description: "本地 FFmpeg 与可编辑工程" }
@@ -27,6 +28,13 @@ export const MODEL_PROVIDERS = [
     id: "windows-sapi",
     label: "Windows 本地语音",
     categories: ["voice"],
+    credential: "local",
+    fields: ["model", "parameters"]
+  },
+  {
+    id: "whisper-local",
+    label: "本地 Whisper",
+    categories: ["transcription"],
     credential: "local",
     fields: ["model", "parameters"]
   },

@@ -130,6 +130,18 @@ export function seedDefaults() {
         parameters: {}
       },
       {
+        id: "model-transcription-whisper",
+        category: "transcription",
+        provider: "whisper-local",
+        profile: "",
+        model: "whisper-local",
+        label: "本地 Whisper 转写",
+        enabled: true,
+        isDefault: true,
+        status: "ready",
+        parameters: { language: "zh" }
+      },
+      {
         id: "model-image-pro",
         category: "image",
         provider: "volcengine-ark",
@@ -316,6 +328,25 @@ export function seedDefaults() {
         parameters: { temperature: 0.65 }
       },
       "model-text-pollinations"
+    );
+  }
+
+  if (!getEntity("model", "model-transcription-whisper")) {
+    saveEntity(
+      "model",
+      {
+        id: "model-transcription-whisper",
+        category: "transcription",
+        provider: "whisper-local",
+        profile: "",
+        model: "whisper-local",
+        label: "本地 Whisper 转写",
+        enabled: true,
+        isDefault: true,
+        status: "ready",
+        parameters: { language: "zh" }
+      },
+      "model-transcription-whisper"
     );
   }
 

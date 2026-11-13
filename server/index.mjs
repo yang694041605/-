@@ -81,6 +81,7 @@ import {
   normalizeModelConfiguration,
   schemaForClient
 } from "./model-registry.mjs";
+import { estimateGeneration } from "./generation-estimate.mjs";
 import {
   inspectAudioMix,
   renderFullMix,
@@ -1366,6 +1367,30 @@ async function handleApi(request, response, url) {
       }
     });
     return sendJson(response, 200, { ok: result.ok, result, item: updated });
+  }
+
+  if (path === "/api/generation/estimate" && method === "POST") {
+    const body = await readJson(request);
+    const model = body.modelId ? getEntity("model", body.modelId) : null;
+    if (!model) {
+      return sendJson(response, 404, { ok: false, error: "模型配置不存在" });
+    }
+    if (body.category && model.category !== body.category) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "模型能力与费用估算类别不匹配"
+      });
+    }
+    return sendJson(response, 200, {
+      ok: true,
+      item: estimateGeneration({
+        category: model.category,
+        model,
+        count: body.count,
+        unitCost: body.unitCost,
+        currency: body.currency || "CNY"
+      })
+    });
   }
 
   if (path === "/api/generate/text" && method === "POST") {
@@ -2709,6 +2734,12 @@ async function testModel(model) {
     }
     if (model.provider === "windows-sapi") {
       return { ok: true, message: "Windows 本地中文语音可用" };
+    }
+    if (model.provider === "whisper-local") {
+      return {
+        ok: true,
+        message: "本地 Whisper 转写已配置；首次转写时会验证脚本和模型环境"
+      };
     }
     if (model.provider === "xying-original") {
       return { ok: true, message: "本地原创配乐引擎可用" };

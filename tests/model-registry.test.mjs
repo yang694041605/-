@@ -10,8 +10,10 @@ import {
 test("模型中心暴露稳定的类别和供应商能力矩阵", () => {
   const schema = schemaForClient();
   assert.ok(schema.categories.some((item) => item.id === "video"));
+  assert.ok(schema.categories.some((item) => item.id === "transcription"));
   assert.ok(schema.providers.some((item) => item.id === "volcengine-ark"));
   assert.ok(schema.providers.some((item) => item.id === "pollinations"));
+  assert.ok(schema.providers.some((item) => item.id === "whisper-local"));
   assert.ok(MODEL_CATEGORIES.length >= 7);
   assert.ok(MODEL_PROVIDERS.length >= 5);
 });
@@ -98,6 +100,13 @@ test("Provider 字段会按能力矩阵自动收敛", () => {
 test("模型中心只保留已经落地的核心供应商", () => {
   assert.deepEqual(
     MODEL_PROVIDERS.map((provider) => provider.id).sort(),
-    ["ffmpeg", "pollinations", "volcengine-ark", "windows-sapi", "xying-original"]
+    [
+      "ffmpeg",
+      "pollinations",
+      "volcengine-ark",
+      "whisper-local",
+      "windows-sapi",
+      "xying-original"
+    ]
   );
 });

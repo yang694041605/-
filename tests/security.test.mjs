@@ -111,6 +111,10 @@ test("每个模型类别只有一个默认项", async () => {
     for (const models of groups.values()) {
       assert.equal(models.filter((model) => model.isDefault).length, 1);
     }
+    assert.equal(
+      groups.get("transcription").find((model) => model.isDefault).provider,
+      "whisper-local"
+    );
   } finally {
     await stopTestServer(child, temp);
   }
@@ -121,6 +125,26 @@ test("模型配置接口支持新增、编辑、测试、设默认和删除", as
   try {
     const schemaPayload = await (await fetch(`${base}/api/models`)).json();
     assert.ok(schemaPayload.schema.categories.length >= 7);
+    assert.ok(
+      schemaPayload.schema.categories.some((item) => item.id === "transcription")
+    );
+    const estimateResponse = await fetch(
+      `${base}/api/generation/estimate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: "image",
+          modelId: "model-image-pro",
+          count: 24,
+          unitCost: 0.2
+        })
+      }
+    );
+    assert.equal(estimateResponse.status, 200);
+    const estimate = (await estimateResponse.json()).item;
+    assert.equal(estimate.totalCost, 4.8);
+    assert.equal(estimate.requiresQuote, false);
 
     const invalid = await fetch(`${base}/api/models`, {
       method: "POST",
