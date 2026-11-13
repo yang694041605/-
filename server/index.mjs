@@ -1,5 +1,12 @@
 import { createServer } from "node:http";
-import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  writeFile
+} from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { basename, extname, join, normalize, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -82,6 +89,10 @@ import {
   renderMixSample
 } from "./post-production.mjs";
 import { createDeliveryPackage } from "./delivery.mjs";
+import {
+  findAssetReferences,
+  isVisualAsset
+} from "./asset-lifecycle.mjs";
 
 seedDefaults();
 migrateProjectRecords();
@@ -1137,8 +1148,44 @@ async function handleApi(request, response, url) {
   if (assetMatch && method === "DELETE") {
     const asset = getEntity("asset", assetMatch[1]);
     if (!asset) return sendJson(response, 404, { ok: false, error: "资产不存在" });
+    if (!isVisualAsset(asset)) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "当前只允许删除图片和视频素材"
+      });
+    }
+    const references = findAssetReferences(asset, [
+      { type: "project", items: listEntities("project", 5000) },
+      { type: "template", items: listEntities("template", 5000) },
+      { type: "look", items: listEntities("look", 5000) },
+      { type: "job", items: listEntities("job", 5000) }
+    ]);
+    if (references.length) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: `素材已被${references.slice(0, 3).join("、")}引用，请先解除引用再删除`,
+        references
+      });
+    }
     const deleted = deleteEntity("asset", assetMatch[1]);
-    return sendJson(response, 200, { ok: Boolean(deleted), item: asset });
+    let fileDeleted = false;
+    if (deleted && asset.localPath) {
+      try {
+        const safePath = assertInside(mediaRoot, asset.localPath);
+        const fileStat = await stat(safePath);
+        if (fileStat.isFile()) {
+          await rm(safePath, { force: true });
+          fileDeleted = true;
+        }
+      } catch {
+        fileDeleted = false;
+      }
+    }
+    return sendJson(response, 200, {
+      ok: Boolean(deleted),
+      item: asset,
+      fileDeleted
+    });
   }
 
   const lookGenerateMatch = path.match(/^\/api\/looks\/([^/]+)\/generate$/);

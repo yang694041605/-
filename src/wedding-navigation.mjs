@@ -374,3 +374,42 @@ export function flattenWeddingNavigation(tree = buildWeddingNavigationTree()) {
   tree.forEach((node) => walk(node));
   return result;
 }
+
+function findNavigationPath(nodeId, nodes, path = []) {
+  for (const node of nodes || []) {
+    const nextPath = [...path, node];
+    if (node.id === nodeId) return nextPath;
+    const nested = findNavigationPath(nodeId, node.children, nextPath);
+    if (nested.length) return nested;
+  }
+  return [];
+}
+
+function firstNavigationTarget(node) {
+  if (node.target) return node.target;
+  for (const child of node.children || []) {
+    const target = firstNavigationTarget(child);
+    if (target) return target;
+  }
+  return "";
+}
+
+export function resolveWeddingNavigationAction(
+  nodeId,
+  tree = buildWeddingNavigationTree()
+) {
+  const path = findNavigationPath(nodeId, tree);
+  if (!path.length) return null;
+  const node = path[path.length - 1];
+  const route =
+    [...path]
+      .reverse()
+      .find((item) => item.route)?.route || "";
+  return {
+    node,
+    path,
+    route,
+    target: firstNavigationTarget(node),
+    expandIds: path.map((item) => item.id)
+  };
+}

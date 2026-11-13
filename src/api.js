@@ -74,6 +74,10 @@ export const api = {
       )}&name=${encodeURIComponent(file.name)}&title=${encodeURIComponent(title || file.name)}`,
       { method: "POST", body: file }
     ),
+  deleteAsset: (assetId) =>
+    request(`/api/assets/${encodeURIComponent(assetId)}`, {
+      method: "DELETE"
+    }),
   uploadTemplate: async (file, title = file.name) =>
     request(`/api/templates/upload?name=${encodeURIComponent(file.name)}&title=${encodeURIComponent(title)}`, {
       method: "POST",

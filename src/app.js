@@ -25,7 +25,10 @@ import {
   getWorkflowStep,
   workflowStepGaps
 } from "./workflow-specs.mjs";
-import { buildWeddingNavigationTree } from "./wedding-navigation.mjs";
+import {
+  buildWeddingNavigationTree,
+  resolveWeddingNavigationAction
+} from "./wedding-navigation.mjs";
 
 const STORAGE_KEY = "xying-wedding-film-studio-v1";
 
@@ -725,6 +728,13 @@ let runtime = {
     providers: []
   }
 };
+let mediaViewerState = {
+  src: "",
+  type: "image",
+  title: "",
+  assetId: "",
+  scale: 1
+};
 
 function loadState() {
   try {
@@ -946,6 +956,293 @@ function icon(name) {
   return icons[name] || "";
 }
 
+function ensureMediaViewer() {
+  let viewer = document.querySelector("#media-viewer");
+  if (viewer) return viewer;
+  viewer = document.createElement("div");
+  viewer.id = "media-viewer";
+  viewer.className = "media-viewer";
+  viewer.hidden = true;
+  viewer.innerHTML = `
+    <div class="media-viewer-backdrop" data-media-close></div>
+    <section class="media-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="media-viewer-title">
+      <header class="media-viewer-header">
+        <div>
+          <small>项目媒体预览</small>
+          <h2 id="media-viewer-title">媒体预览</h2>
+          <p data-media-meta></p>
+        </div>
+        <button class="media-viewer-icon-button" type="button" data-media-close aria-label="关闭预览">×</button>
+      </header>
+      <div class="media-viewer-toolbar">
+        <div class="media-viewer-zoom" data-media-image-controls>
+          <button class="media-viewer-tool" type="button" data-media-zoom="out" aria-label="缩小图片">−</button>
+          <button class="media-viewer-tool media-viewer-scale" type="button" data-media-zoom="reset" aria-label="恢复原始大小"><span data-media-scale>100%</span></button>
+          <button class="media-viewer-tool" type="button" data-media-zoom="in" aria-label="放大图片">＋</button>
+        </div>
+        <div class="media-viewer-actions">
+          <a class="media-viewer-action primary" data-media-save href="#" download>${icon("upload")}保存文件</a>
+          <button class="media-viewer-action danger" type="button" data-media-delete hidden>${icon("trash")}删除素材</button>
+        </div>
+      </div>
+      <div class="media-viewer-stage" data-media-stage>
+        <img data-media-image alt="" hidden />
+        <video data-media-video controls playsinline preload="metadata" hidden></video>
+      </div>
+      <footer class="media-viewer-footer">
+        <span>图片可放大、缩小并保存；视频可直接播放或保存。</span>
+        <span>被镜头或项目引用的素材禁止直接删除。</span>
+      </footer>
+    </section>
+  `;
+  document.body.appendChild(viewer);
+  viewer.querySelector("[data-media-stage]")?.addEventListener(
+    "wheel",
+    (event) => {
+      if (mediaViewerState.type !== "image") return;
+      event.preventDefault();
+      updateMediaViewerScale(
+        mediaViewerState.scale + (event.deltaY < 0 ? 0.2 : -0.2)
+      );
+    },
+    { passive: false }
+  );
+  viewer.querySelector("[data-media-image]")?.addEventListener("dblclick", () => {
+    updateMediaViewerScale(mediaViewerState.scale > 1 ? 1 : 2);
+  });
+  return viewer;
+}
+
+function normalizedMediaUrl(value) {
+  if (!value) return "";
+  if (String(value).startsWith("data:")) return String(value);
+  try {
+    const url = new URL(value, window.location.href);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return String(value).replaceAll("\\", "/");
+  }
+}
+
+function findRuntimeAssetForSource(source) {
+  const normalized = normalizedMediaUrl(source);
+  if (!normalized || normalized.startsWith("data:")) return null;
+  return (
+    runtime.assets.find((asset) =>
+      [asset.url, asset.previewUrl]
+        .filter(Boolean)
+        .some((value) => normalizedMediaUrl(api.mediaUrl(value)) === normalized)
+    ) || null
+  );
+}
+
+function isDeletableVisualAsset(asset) {
+  return Boolean(
+    asset &&
+      [
+        "image",
+        "look-image",
+        "photo",
+        "project-photo",
+        "story-card",
+        "outfit-reference",
+        "scene-reference",
+        "video",
+        "template-clip",
+        "preview",
+        "export"
+      ].includes(asset.kind)
+  );
+}
+
+function mediaFilename(title, source, type) {
+  const safeTitle =
+    String(title || "婚礼微电影素材")
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "婚礼微电影素材";
+  let extension = "";
+  try {
+    extension = new URL(source, window.location.href).pathname.match(/\.[a-z0-9]+$/i)?.[0] || "";
+  } catch {
+    extension = "";
+  }
+  if (!extension) extension = type === "video" ? ".mp4" : ".jpg";
+  return `${safeTitle}${extension}`;
+}
+
+function updateMediaViewerScale(nextScale) {
+  const viewer = ensureMediaViewer();
+  mediaViewerState.scale = Math.min(4, Math.max(0.5, Number(nextScale) || 1));
+  const image = viewer.querySelector("[data-media-image]");
+  if (image) {
+    image.style.transform = `scale(${mediaViewerState.scale})`;
+  }
+  const label = viewer.querySelector("[data-media-scale]");
+  if (label) label.textContent = `${Math.round(mediaViewerState.scale * 100)}%`;
+}
+
+function openMediaViewer({ source, type = "image", title = "", assetId = "" }) {
+  if (!source) return;
+  const viewer = ensureMediaViewer();
+  const asset =
+    runtime.assets.find((item) => item.id === assetId) ||
+    findRuntimeAssetForSource(source);
+  mediaViewerState = {
+    src: source,
+    type,
+    title: title || asset?.title || (type === "video" ? "婚礼视频" : "婚礼图片"),
+    assetId: asset?.id || assetId || "",
+    scale: 1
+  };
+  const image = viewer.querySelector("[data-media-image]");
+  const video = viewer.querySelector("[data-media-video]");
+  const imageControls = viewer.querySelector("[data-media-image-controls]");
+  const save = viewer.querySelector("[data-media-save]");
+  const deleteButton = viewer.querySelector("[data-media-delete]");
+
+  viewer.querySelector("#media-viewer-title").textContent = mediaViewerState.title;
+  viewer.querySelector("[data-media-meta]").textContent =
+    type === "video" ? "视频预览 · 可播放和保存原文件" : "图片预览 · 可放大和保存原图";
+  image.hidden = type !== "image";
+  video.hidden = type !== "video";
+  imageControls.hidden = type !== "image";
+  if (type === "video") {
+    video.src = source;
+    video.load();
+  } else {
+    image.src = source;
+    image.alt = mediaViewerState.title;
+    image.style.transform = "scale(1)";
+  }
+  save.href = source;
+  save.download = mediaFilename(mediaViewerState.title, source, type);
+  save.setAttribute("download", save.download);
+  deleteButton.hidden = !isDeletableVisualAsset(asset);
+  deleteButton.disabled = false;
+  deleteButton.dataset.assetId = asset?.id || "";
+  deleteButton.dataset.assetTitle = asset?.title || mediaViewerState.title;
+  updateMediaViewerScale(1);
+  viewer.hidden = false;
+  document.body.classList.add("media-viewer-open");
+  window.setTimeout(() => {
+    viewer.querySelector("[data-media-close]")?.focus();
+  }, 0);
+}
+
+function closeMediaViewer() {
+  const viewer = document.querySelector("#media-viewer");
+  if (!viewer || viewer.hidden) return;
+  const video = viewer.querySelector("[data-media-video]");
+  if (video) {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+  }
+  viewer.hidden = true;
+  document.body.classList.remove("media-viewer-open");
+  mediaViewerState = {
+    src: "",
+    type: "image",
+    title: "",
+    assetId: "",
+    scale: 1
+  };
+}
+
+function openMediaViewerFromElement(element) {
+  if (!element) return;
+  const source =
+    element.currentSrc ||
+    element.getAttribute("src") ||
+    element.querySelector?.("source")?.getAttribute("src") ||
+    "";
+  const type = element.tagName === "VIDEO" ? "video" : "image";
+  const host = element.closest(
+    "[data-media-asset-id], .asset-preview, figure, .video-shell, .character-photo"
+  );
+  const title =
+    host?.dataset.mediaTitle ||
+    element.dataset.mediaTitle ||
+    element.getAttribute("alt") ||
+    findRuntimeAssetForSource(source)?.title ||
+    (type === "video" ? "婚礼视频" : "婚礼图片");
+  const assetId =
+    element.dataset.mediaAssetId ||
+    host?.dataset.mediaAssetId ||
+    findRuntimeAssetForSource(source)?.id ||
+    "";
+  openMediaViewer({ source, type, title, assetId });
+}
+
+function prepareMediaPreviewElements() {
+  document.querySelectorAll("#main-content img, #main-content video").forEach((element) => {
+    if (element.closest("#media-viewer")) return;
+    const source =
+      element.currentSrc ||
+      element.getAttribute("src") ||
+      element.querySelector?.("source")?.getAttribute("src") ||
+      "";
+    const asset = findRuntimeAssetForSource(source);
+    element.dataset.mediaPreview = "true";
+    element.tabIndex = 0;
+    element.title = `点击预览${asset ? "，可保存或安全删除" : "并保存"}`;
+    if (asset?.id) element.dataset.mediaAssetId = asset.id;
+    const host = element.closest(
+      "[data-media-asset-id], .asset-preview, figure, .video-shell, .character-photo"
+    );
+    if (host) {
+      host.dataset.mediaHost = "true";
+      host.dataset.mediaTitle =
+        element.getAttribute("alt") || asset?.title || (element.tagName === "VIDEO" ? "婚礼视频" : "婚礼图片");
+      if (asset?.id) host.dataset.mediaAssetId = asset.id;
+    }
+  });
+}
+
+async function handleMediaViewerClick(event) {
+  const viewer = event.target.closest("#media-viewer");
+  if (!viewer) return false;
+  if (event.target.closest("[data-media-close]")) {
+    closeMediaViewer();
+    return true;
+  }
+  const zoom = event.target.closest("[data-media-zoom]")?.dataset.mediaZoom;
+  if (zoom) {
+    const nextScale =
+      zoom === "in"
+        ? mediaViewerState.scale + 0.25
+        : zoom === "out"
+          ? mediaViewerState.scale - 0.25
+          : 1;
+    updateMediaViewerScale(nextScale);
+    return true;
+  }
+  const deleteButton = event.target.closest("[data-media-delete]");
+  if (!deleteButton || deleteButton.disabled) return false;
+  const assetId = deleteButton.dataset.assetId;
+  if (!assetId) return true;
+  if (
+    !window.confirm(
+      `确认删除“${deleteButton.dataset.assetTitle || "当前素材"}”吗？被镜头或项目引用的素材不会被删除。`
+    )
+  ) {
+    return true;
+  }
+  deleteButton.disabled = true;
+  try {
+    await api.deleteAsset(assetId);
+    closeMediaViewer();
+    await refreshRuntime();
+    showToast("素材及本地文件已删除");
+  } catch (error) {
+    deleteButton.disabled = false;
+    showToast(error.message || "素材删除失败，请先解除镜头引用");
+  }
+  return true;
+}
+
 function render() {
   document.querySelectorAll(".top-tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.route === activeRoute);
@@ -1027,6 +1324,21 @@ function renderNav() {
   root.innerHTML = NAV_TREE.map((node) => renderNavNode(node, 1)).join("");
 }
 
+function scrollToNavigationTarget(target, route) {
+  window.setTimeout(() => {
+    const element =
+      (target &&
+        (document.querySelector(`[data-step-target="${target}"]`) ||
+          document.getElementById(target))) ||
+      document.querySelector(`[data-page-route="${route}"]`) ||
+      document.querySelector("#main-content");
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: target ? "center" : "start" });
+    element.classList.add("nav-target-highlight");
+    window.setTimeout(() => element.classList.remove("nav-target-highlight"), 1400);
+  }, 140);
+}
+
 function renderNavNode(node, depth) {
   const children = node.children || [];
   const isOpen = openNavIds.has(node.id);
@@ -1040,6 +1352,7 @@ function renderNavNode(node, depth) {
       <button
         class="nav-node ${isActive ? "active" : ""}"
         data-nav-id="${node.id}"
+        data-nav-depth="${depth}"
         data-route="${node.route || ""}"
         data-theme="${node.theme || ""}"
         data-focus="${node.focus || ""}"
@@ -1104,7 +1417,7 @@ function getView(route) {
 function pageHeader(route, customDescription = "") {
   const [title, description] = ROUTE_META[route] || ROUTE_META.overview;
   return `
-    <header class="page-heading">
+    <header class="page-heading" data-page-route="${esc(route)}">
       <div>
         <div class="page-kicker">囍映创作流程</div>
         <h1>${esc(title)}</h1>
@@ -3188,6 +3501,7 @@ function settingsPage() {
 }
 
 function bindCurrentView() {
+  prepareMediaPreviewElements();
   const hero = document.querySelector(".hero");
   if (hero) {
     hero.addEventListener("mousemove", (event) => {
@@ -3272,7 +3586,20 @@ function bindCurrentView() {
   }
 }
 
+document.addEventListener(
+  "click",
+  (event) => {
+    const media = event.target.closest("img[data-media-preview], video[data-media-preview]");
+    if (!media || media.closest("#media-viewer")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openMediaViewerFromElement(media);
+  },
+  true
+);
+
 document.addEventListener("click", async (event) => {
+  if (await handleMediaViewerClick(event)) return;
   const routeButton = event.target.closest("[data-route]");
   const navButton = event.target.closest("[data-nav-id]");
   const actionButton = event.target.closest("[data-action]");
@@ -3281,25 +3608,24 @@ document.addEventListener("click", async (event) => {
   createRipple(event.clientX, event.clientY);
 
   if (navButton) {
-    const node = findNavNode(navButton.dataset.navId);
-    if (node?.children?.length) {
+    const action = resolveWeddingNavigationAction(navButton.dataset.navId, NAV_TREE);
+    const node = action?.node || findNavNode(navButton.dataset.navId);
+    if (!node) return;
+    if (event.target.closest(".nav-chevron") && node.children?.length) {
       if (openNavIds.has(node.id)) openNavIds.delete(node.id);
       else openNavIds.add(node.id);
+      renderNav();
+      return;
     }
-    if (node?.theme) {
+    if (node.theme) {
       state.theme = node.theme;
       rebuildProject();
     }
-    if (node?.focus) activeFocus = node.focus;
-    if (node?.route) {
-      navigateTo(node.route);
-      if (node.target) {
-        window.setTimeout(() => {
-          document
-            .querySelector(`[data-step-target="${node.target}"]`)
-            ?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 80);
-      }
+    if (node.focus) activeFocus = node.focus;
+    for (const id of action.expandIds || []) openNavIds.add(id);
+    if (action.route) {
+      navigateTo(action.route);
+      scrollToNavigationTarget(action.target, action.route);
     } else {
       renderNav();
     }
@@ -3327,6 +3653,18 @@ document.addEventListener("click", async (event) => {
       await refreshRuntime({ rerender: false });
     }
     return;
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeMediaViewer();
+    return;
+  }
+  const media = event.target.closest?.("img[data-media-preview], video[data-media-preview]");
+  if (media && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    openMediaViewerFromElement(media);
   }
 });
 

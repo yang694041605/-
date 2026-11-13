@@ -225,3 +225,52 @@ test("渲染与生成接口拒绝浏览器提交文件路径", async () => {
     await stopTestServer(child, temp);
   }
 });
+
+test("图片素材未被引用时可以删除记录和本地文件，被镜头或项目引用时必须拒绝", async () => {
+  const { child, base, temp } = await startTestServer();
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z0YQAAAAASUVORK5CYII=",
+    "base64"
+  );
+  try {
+    const uploadResponse = await fetch(
+      `${base}/api/assets/upload?kind=project-photo&projectId=project-default&name=delete-me.png`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: png
+      }
+    );
+    assert.equal(uploadResponse.status, 201);
+    const uploaded = (await uploadResponse.json()).item;
+
+    const deleteResponse = await fetch(`${base}/api/assets/${uploaded.id}`, {
+      method: "DELETE"
+    });
+    assert.equal(deleteResponse.status, 200);
+    const deletePayload = await deleteResponse.json();
+    assert.equal(deletePayload.fileDeleted, true);
+    assert.notEqual((await fetch(`${base}${uploaded.url}`)).status, 200);
+
+    const projectPhotoResponse = await fetch(
+      `${base}/api/projects/project-default/photos?role=groom&name=referenced.png`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: png
+      }
+    );
+    assert.equal(projectPhotoResponse.status, 201);
+    const projectPhoto = (await projectPhotoResponse.json()).asset;
+    const blockedResponse = await fetch(
+      `${base}/api/assets/${projectPhoto.id}`,
+      { method: "DELETE" }
+    );
+    assert.equal(blockedResponse.status, 409);
+    const blocked = await blockedResponse.json();
+    assert.match(blocked.error, /已被/);
+    assert.equal((await fetch(`${base}${projectPhoto.url}`)).status, 200);
+  } finally {
+    await stopTestServer(child, temp);
+  }
+});

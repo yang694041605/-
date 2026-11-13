@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildWeddingNavigationTree,
-  flattenWeddingNavigation
+  flattenWeddingNavigation,
+  resolveWeddingNavigationAction
 } from "../src/wedding-navigation.mjs";
 
 test("婚礼导航覆盖一级到六级且节点 ID 唯一", () => {
@@ -35,4 +36,30 @@ test("导航属于婚礼微电影业务且不存在旧通用模块", () => {
 test("级联路径可以完整追踪到父亲节点", () => {
   const level6 = flattenWeddingNavigation().find((item) => item.depth === 6);
   assert.equal(level6.path.length, 6);
+});
+
+test("三级、四级和五级节点都能解析到实际页面与定位目标", () => {
+  const tree = buildWeddingNavigationTree();
+  const nodes = flattenWeddingNavigation(tree).filter(
+    (item) => item.depth >= 3 && item.depth <= 5
+  );
+  assert.ok(nodes.length > 100);
+  for (const { node } of nodes) {
+    const action = resolveWeddingNavigationAction(node.id, tree);
+    assert.ok(action?.route, `${node.id} 无法解析页面路由`);
+    assert.ok(action.path.length >= 3, `${node.id} 缺少完整级联路径`);
+    assert.ok(action.path.some((item) => item.id === node.id));
+  }
+});
+
+test("点击分组节点会展开祖先菜单并带上可用的定位锚点", () => {
+  const tree = buildWeddingNavigationTree();
+  const action = resolveWeddingNavigationAction(
+    "step-7-level4-input",
+    tree
+  );
+  assert.equal(action.route, "step7");
+  assert.equal(action.target, "step-7-input-1");
+  assert.ok(action.expandIds.includes("guide-14-steps"));
+  assert.ok(action.expandIds.includes("step-7-level4-input"));
 });
