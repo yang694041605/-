@@ -1,6 +1,6 @@
 export const FILM_FPS = 24;
 export const STORY_STEP_COUNT = 14;
-export const REMIX_STEP_COUNT = 4;
+export const REMIX_STEP_COUNT = 5;
 
 export const REVIEW_CHECKS = [
   "identity",

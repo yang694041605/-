@@ -999,6 +999,8 @@ git commit -m "feat: add red dual-entry main page"
 - Modify: `src/app.js`
 - Modify: `src/api.js`
 - Modify: `src/styles.css`
+- Modify: `src/production-model.mjs`
+- Modify: `tests/navigation.test.mjs`
 - Modify: `scripts/build.mjs`
 
 **Interfaces:**
@@ -1113,7 +1115,7 @@ Expected: PASS.
 
 ```powershell
 git add src/app.js src/api.js src/styles.css tests/remix-five-step.test.mjs
-git add src/remix-page-specs.mjs scripts/build.mjs
+git add src/remix-page-specs.mjs src/production-model.mjs tests/navigation.test.mjs scripts/build.mjs
 git commit -m "feat: implement five-step Douyin workflow"
 ```
 

@@ -30,6 +30,13 @@ import {
   TOP_NAVIGATION,
   buildStudioNavigation
 } from "./studio-navigation.mjs";
+import {
+  buildAudioAnalysisPrompt,
+  buildReferenceImagePrompt,
+  buildReplacementVideoPrompt,
+  buildStoredRemixReport
+} from "./remix-report.mjs";
+import { REMIX_PAGE_SPECS } from "./remix-page-specs.mjs";
 
 const STORAGE_KEY = "xying-wedding-film-studio-v1";
 
@@ -411,10 +418,11 @@ const ROUTE_META = {
   overview: ["项目工作台", "把真实故事，拍成只属于你们的一部电影"],
   wizard: ["14 步婚礼电影向导", "每一步都有明确素材、人工确认和下一步，不会一次盲渲染到底"],
   remix: ["抖音模板复刻", "下载参考片、按 24 FPS 提取、明确替换人物，再按当前镜头时间轴封装"],
-  remixStep1: ["01 下载与全帧提取", "保存原片、封面、24 FPS 全帧索引和原始音频"],
-  remixStep2: ["02 画面声音字幕分析", "提取逐镜画面语义、声音段落、字幕线索和提示词结构"],
-  remixStep3: ["03 人物目标与逐镜替换", "明确替换左侧、右侧或编号人物，逐镜生成并审核"],
-  remixStep4: ["04 时间轴封装与交付", "只合成当前已批准镜头，保留原声音结构与试听交付"],
+  remixStep1: ["01 链接下载与素材提取", "下载原片并保存 24 FPS 全帧索引、原始音频和媒体信息"],
+  remixStep2: ["02 画面、音频、字幕与提示词解析", "生成逐镜报告和可复制的音频、图片、视频提示词"],
+  remixStep3: ["03 男女主角色图批量生成", "以真实身份照片为锚点批量生成和筛选角色图"],
+  remixStep4: ["04 人物与道具逐镜替换", "绑定人物与道具，生成或导入视频并完成九项审核"],
+  remixStep5: ["05 原轨道对齐、预览与交付", "把替换镜头对齐原音乐、字幕和 24 FPS 时间轴"],
   templates: ["风格模板库", "上传本地视频或解析抖音链接，把参考片变成可编辑的模板配方"],
   story: ["故事共创", "从一个真实细节出发，让剧情有来处、有情绪、有落点"],
   characters: ["人物设定", "锁定男女主的脸、气质与服装，保证每个镜头都是同一个人"],
@@ -547,39 +555,14 @@ for (const step of WIZARD_STEPS) {
   ];
 }
 
-const REMIX_STEPS = [
-  { number: 1, title: "下载与全帧提取", subtitle: "24 FPS 全帧、原始音频和帧索引", route: "remixStep1" },
-  { number: 2, title: "画面声音字幕分析", subtitle: "逐镜画面、声音、字幕和提示词结构", route: "remixStep2" },
-  { number: 3, title: "人物目标与逐镜替换", subtitle: "明确人物后逐镜生成和人工审核", route: "remixStep3" },
-  { number: 4, title: "时间轴封装与交付", subtitle: "当前镜头时间线、声音字幕和预览", route: "remixStep4" }
-];
+const REMIX_STEPS = REMIX_PAGE_SPECS.map((step) => ({
+  number: step.number,
+  title: step.title,
+  subtitle: step.subtitle,
+  route: step.route
+}));
 
-const REMIX_GUIDES = [
-  {
-    inputs: ["抖音链接或本地参考视频", "模板使用权", "当前项目男女主照片"],
-    actions: ["下载并保存原片", "按 24 FPS 提取全帧", "提取独立原音频和帧索引"],
-    outputs: ["完整帧序列", "frame-index.json", "original-audio.wav"],
-    checks: ["原片可播放", "帧数与 24 FPS 时长一致", "音频文件存在"]
-  },
-  {
-    inputs: ["全帧索引", "原始音频", "切镜结果"],
-    actions: ["逐镜画面理解", "音视频与字幕转写", "人物位置和目标识别", "提示词结构提取"],
-    outputs: ["镜头语义", "字幕与声音时间点", "人物目标候选", "视频提示词结构"],
-    checks: ["覆盖完整时间轴", "不编造看不到的内容", "模型缺口明确记录"]
-  },
-  {
-    inputs: ["男女主角色照片", "明确替换目标", "最多八个连续镜头"],
-    actions: ["指定左侧/右侧/人物编号", "生成每镜提示词", "逐镜生成或上传视频", "九项人工质检"],
-    outputs: ["每镜替换视频", "首帧与提示词版本", "人工审核记录"],
-    checks: ["不是同一人物目标", "身份、手部、动作、背景通过", "每镜绑定最终片段"]
-  },
-  {
-    inputs: ["全部批准镜头", "原声音", "裁剪字幕", "完整时间轴"],
-    actions: ["生成完整预览", "检查原声音与字幕", "整理正式交付包"],
-    outputs: ["预览 MP4", "交付包", "字幕与工程文件"],
-    checks: ["完整观看", "原声音与画面同步", "授权和质检记录完整"]
-  }
-];
+const REMIX_GUIDES = REMIX_PAGE_SPECS;
 
 function buildRemixNavigationChildren(number) {
   const guide = REMIX_GUIDES[number - 1];
@@ -631,6 +614,8 @@ let activeRouteInfo = parseRouteHash(window.location.hash);
 let activeRoute = routeNameFromInfo(activeRouteInfo);
 let activeFocus = null;
 let remixSelectedShotId = "";
+let remixBatchEstimate = null;
+let remixBatchJobId = "";
 let selectedModelCategory = "text";
 let modelEditorId = "";
 let modelDraftCategory = "";
@@ -656,6 +641,7 @@ let runtime = {
   exports: [],
   jobs: [],
   timeline: null,
+  remixReport: null,
   approvalSnapshots: {},
   modelSchema: {
     categories: [],
@@ -824,7 +810,11 @@ async function refreshRuntime({ rerender = true } = {}) {
       const timelinePayload = await api
         .getProjectTimeline(project.id, effectiveMode)
         .catch(() => null);
+      const remixReportPayload = await api
+        .getRemixReport(project.id)
+        .catch(() => null);
       runtime.timeline = timelinePayload?.item || null;
+      runtime.remixReport = remixReportPayload?.item || null;
       runtime.approvalSnapshots = timelinePayload?.approvalSnapshots || {};
     }
   } catch {
@@ -1550,6 +1540,17 @@ function remixReady(stepNumber) {
     return Boolean(template?.remixAnalysis);
   }
   if (stepNumber === 3) {
+    return Boolean(
+      state.photoAssetIds?.groom &&
+        state.photoAssetIds?.bride &&
+        runtime.assets.some(
+          (asset) =>
+            asset.projectId === currentProjectId &&
+            ["image", "look-image"].includes(asset.kind)
+        )
+    );
+  }
+  if (stepNumber === 4) {
     const expected = Math.min(8, storyboard.length);
     const approved = storyboard.filter(
       (shot) =>
@@ -1559,7 +1560,7 @@ function remixReady(stepNumber) {
     ).length;
     return expected > 0 && approved >= expected;
   }
-  if (stepNumber === 4) {
+  if (stepNumber === 5) {
     const project = runtime.projects.find((item) => item.id === currentProjectId);
     const since = project?.lastRemixApprovalAt || "";
     return runtime.assets.some(
@@ -1589,7 +1590,7 @@ function remixOverviewPage() {
         <section class="card card-pad">
           <div class="section-title"><div><h3>当前参考片</h3><p>${template ? esc(template.title) : "尚未导入模板"}</p></div></div>
           ${template ? `<div class="summary-meta"><div class="summary-meta-item"><span>原片时长</span><strong>${Number(template.duration || 0).toFixed(1)} 秒</strong></div><div class="summary-meta-item"><span>全帧提取</span><strong>${extraction?.totalFrames ? `${extraction.totalFrames} / ${extraction.expectedFrames} 帧` : "尚未执行"}</strong></div><div class="summary-meta-item"><span>复刻成片</span><strong>${Number(project?.duration || 0).toFixed(1)} 秒</strong></div></div>` : '<p class="small muted">请先在模板库上传视频或解析抖音链接。</p>'}
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button class="button primary" data-route="remixStep1">进入四步复刻</button><button class="button ghost" data-route="templates">打开模板库</button></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button class="button primary" data-route="remixStep1">进入五步复刻</button><button class="button ghost" data-route="templates">打开模板库</button></div>
         </section>
       </div>
     </div>`;
@@ -1604,7 +1605,7 @@ function remixStepPage(number) {
       ${pageHeader(step.route)}
       <section class="step-context card">
         <div class="step-context-index">${String(number).padStart(2, "0")}</div>
-        <div class="step-context-copy"><small>抖音复刻 · 第 ${number} / 4 步</small><strong>${esc(step.title)}</strong><span>${esc(step.subtitle)}</span></div>
+        <div class="step-context-copy"><small>抖音复刻 · 第 ${number} / 5 步</small><strong>${esc(step.title)}</strong><span>${esc(step.subtitle)}</span></div>
         <span class="badge ${approved ? "green" : ready ? "gold" : "gray"}">${approved ? "已确认" : ready ? "可确认" : "等待当前步骤材料"}</span>
         <button class="button ghost small-button" data-route="remix">返回复刻总览</button>
       </section>
@@ -1614,7 +1615,7 @@ function remixStepPage(number) {
         <div><strong>${ready ? "当前复刻步骤条件已满足" : "当前复刻步骤仍有缺口"}</strong><p>确认只绑定当前项目、当前镜头和当前时间轴版本。</p></div>
         <div class="step-confirm-actions">
           ${number > 1 ? `<button class="button ghost small-button" data-route="remixStep${number - 1}">上一步</button>` : ""}
-          <button class="button primary" data-action="approve-workflow-step" data-approval-step="${number}" data-approval-mode="remix" ${ready ? "" : "disabled"}>${icon("arrow")}确认并进入第 ${Math.min(4, number + 1)} 步</button>
+          <button class="button primary" data-action="approve-workflow-step" data-approval-step="${number}" data-approval-mode="remix" ${ready ? "" : "disabled"}>${icon("arrow")}确认并进入第 ${Math.min(5, number + 1)} 步</button>
         </div>
       </section>
     </div>`;
@@ -1625,7 +1626,7 @@ function remixWorkflowGuide(number) {
   if (!guide) return "";
   return `
     <section class="card card-pad step-production-guide">
-      <div class="section-title"><div><h2>本步复刻生产说明</h2><p>每一级菜单都可以展开，第五级条目会跳转到对应输入、功能、产物或审核项。</p></div><span class="badge red">复刻 ${number} / 4</span></div>
+      <div class="section-title"><div><h2>本步复刻生产说明</h2><p>本页集中展示输入、操作、产物和人工检查，不再展开细分导航。</p></div><span class="badge red">复刻 ${number} / 5</span></div>
       <div class="step-guide-grid">
         <div class="step-guide-column"><span class="step-guide-index">输入</span><strong>这一步需要什么</strong>${guide.inputs.map((item, index) => `<p data-step-target="remix-${number}-input-${index + 1}"><span>${icon("check")}</span>${esc(item)}</p>`).join("")}</div>
         <div class="step-guide-column"><span class="step-guide-index">操作</span><strong>页面上要完成什么</strong>${guide.actions.map((item, index) => `<p data-step-target="remix-${number}-actions-${index + 1}"><b>${index + 1}</b>${esc(item)}</p>`).join("")}</div>
@@ -1635,62 +1636,165 @@ function remixWorkflowGuide(number) {
     </section>`;
 }
 
+function remixTargetOptions(value = "") {
+  return ["left", "right", "person-1", "person-2", "person-3", "person-4"]
+    .map(
+      (target) =>
+        `<option value="${target}" ${value === target ? "selected" : ""}>${
+          target === "left"
+            ? "左侧人物"
+            : target === "right"
+              ? "右侧人物"
+              : `人物 ${target.split("-")[1]}`
+        }</option>`
+    )
+    .join("");
+}
+
+function remixReviewItems() {
+  return [
+    ["identity", "身份一致"],
+    ["crossFace", "无串脸"],
+    ["hands", "手部正确"],
+    ["actionMatch", "动作匹配"],
+    ["prop", "道具接触"],
+    ["backgroundDrift", "背景稳定"],
+    ["blackBars", "无黑边"],
+    ["subtitleSafety", "字幕安全"],
+    ["audioSync", "音画同步"]
+  ];
+}
+
 function remixStepContent(number) {
   const template = currentRemixTemplate();
   const project = runtime.projects.find((item) => item.id === currentProjectId);
   const extraction = template?.remixExtraction;
   const analysis = template?.remixAnalysis;
+  const report =
+    runtime.remixReport || buildStoredRemixReport(template, project);
   const remixShots = storyboard;
   const selected =
     remixShots.find((shot) => shot.id === remixSelectedShotId) ||
     remixShots[0] ||
     null;
+  const imageModel = defaultModel("image");
+  const videoModel = defaultModel("video");
+  const roleImageAssets = runtime.assets.filter(
+    (asset) =>
+      asset.projectId === currentProjectId &&
+      ["image", "look-image"].includes(asset.kind)
+  );
+
   if (number === 1) {
-    return `<div class="content-grid">
-      <section class="card card-pad"><div class="section-title"><div><h2>参考片与全帧提取</h2><p>一秒固定提取 24 帧，同时保留独立原音频</p></div><span class="badge ${extraction ? "green" : "gold"}">${extraction ? "已提取" : "等待提取"}</span></div>
-        ${template ? `<div class="summary-meta"><div class="summary-meta-item"><span>模板</span><strong>${esc(template.title)}</strong></div><div class="summary-meta-item"><span>分辨率</span><strong>${template.aspect || "未知"}</strong></div><div class="summary-meta-item"><span>原片时长</span><strong>${Number(template.duration || 0).toFixed(1)} 秒</strong></div></div><button class="button primary" style="width:100%;margin-top:16px;" data-action="remix-extract" data-template-id="${template.id}">${icon("sparkle")}${extraction ? "重新提取 24 FPS 全帧" : "开始 24 FPS 全帧提取"}</button>` : '<p class="small muted">模板库还没有已下载的视频。</p><button class="button primary" data-route="templates">前往模板库</button>'}
+    return `<div class="content-grid remix-workflow-grid">
+      <section class="card card-pad">
+        <div class="section-title"><div><h2>抖音链接下载</h2><p>下载前确认参考片使用和改编权限</p></div><span class="badge ${template ? "green" : "gold"}">${template ? "已导入" : "等待链接"}</span></div>
+        <div class="field"><label for="remix-template-url">抖音短链接</label><input id="remix-template-url" class="input" data-template-url placeholder="https://v.douyin.com/..." /></div>
+        <label class="check-item remix-rights-check"><input type="checkbox" data-remix-rights /><div class="check-copy"><strong>已取得参考片使用权</strong><small>下载内容只作为结构参考，不把原片直接交付给客户。</small></div></label>
+        <button class="button primary" style="width:100%;margin-top:12px;" data-action="import-template-url">${icon("sparkle")}下载并建立模板</button>
+        ${template ? `<div class="summary-meta" style="margin-top:16px;"><div class="summary-meta-item"><span>模板</span><strong>${esc(template.title)}</strong></div><div class="summary-meta-item"><span>画幅</span><strong>${esc(template.aspect || "未知")}</strong></div><div class="summary-meta-item"><span>时长</span><strong>${Number(template.duration || 0).toFixed(2)} 秒</strong></div></div>` : ""}
       </section>
-      <section class="card card-pad"><div class="section-title"><div><h3>提取结果</h3><p>全帧不等于逐帧视觉模型调用，先建立可追溯索引</p></div></div>${extraction ? `<div class="checklist"><div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>${extraction.totalFrames} 帧</strong><small>${extraction.fps} FPS · ${extraction.durationTimecode}</small></div></div><div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>原始音频</strong><small>${extraction.audioUrl ? "已保存独立 WAV" : "缺失"}</small></div></div><div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>帧索引</strong><small>${extraction.indexUrl ? "frame-index.json 已生成" : "缺失"}</small></div></div></div>` : '<div class="empty-state"><div><div class="empty-state-symbol">帧</div><h3>尚未提取</h3><p>导入抖音视频后，从这里开始。</p></div></div>'}
+      <section class="card card-pad">
+        <div class="section-title"><div><h3>24 FPS 全帧与音频</h3><p>原片、帧索引和独立音频必须一起保留</p></div><span class="badge ${extraction ? "green" : "gray"}">${extraction ? "已提取" : "待提取"}</span></div>
+        ${template ? `<button class="button primary" style="width:100%;" data-action="remix-extract" data-template-id="${template.id}">${icon("sparkle")}${extraction ? "重新提取" : "开始提取 24 FPS 全帧"}</button>` : '<button class="button primary" style="width:100%;" data-route="templates">先上传本地参考片</button>'}
+        ${extraction ? `<div class="checklist" style="margin-top:14px;">
+          <div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>${extraction.totalFrames} 帧</strong><small>${extraction.fps} FPS · ${esc(extraction.durationTimecode || "")}</small></div></div>
+          <div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>原始音频</strong><small>${extraction.audioUrl ? `<a href="${esc(api.mediaUrl(extraction.audioUrl))}" target="_blank" rel="noreferrer">打开 WAV</a>` : "缺失"}</small></div></div>
+          <div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>帧索引</strong><small>${extraction.indexUrl ? `<a href="${esc(api.mediaUrl(extraction.indexUrl))}" target="_blank" rel="noreferrer">打开 JSON</a>` : "缺失"}</small></div></div>
+        </div>` : ""}
       </section>
     </div>`;
   }
+
   if (number === 2) {
-    return `<div class="content-grid">
-      <section class="card card-pad"><div class="section-title"><div><h2>逐镜结构分析</h2><p>画面语义、声音转写、字幕线索和提示词结构分开记录</p></div><span class="badge ${analysis ? "green" : "gold"}">${analysis ? "已完成" : "等待分析"}</span></div><button class="button primary" style="width:100%;" data-action="remix-analyze" data-template-id="${template?.id || ""}" ${extraction ? "" : "disabled"}>${icon("sparkle")}${analysis ? "重新分析当前模板" : "开始分析画面与声音"}</button></section>
-      <section class="card card-pad"><div class="section-title"><div><h3>分析摘要</h3><p>模型不可用时会明确保留缺口，不伪装成完整成功</p></div></div>${analysis ? `<div class="summary-meta"><div class="summary-meta-item"><span>镜头</span><strong>${analysis.shots?.length || 0} 个</strong></div><div class="summary-meta-item"><span>转写</span><strong>${analysis.audio?.transcript?.length || 0} 段</strong></div><div class="summary-meta-item"><span>人物目标</span><strong>${analysis.targetCandidates?.length || 0} 类</strong></div></div>${analysis.warnings?.length ? `<div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>仍有分析缺口</strong>${analysis.warnings.map(esc).join("<br />")}</div></div>` : ""}` : '<div class="empty-state"><div><div class="empty-state-symbol">析</div><h3>尚未分析</h3><p>先完成全帧和原音频提取。</p></div></div>'}
-      </section>
-    </div>`;
-  }
-  if (number === 3) {
-    const targetOptions = (value) => ["left", "right", "person-1", "person-2", "person-3", "person-4"].map((target) => `<option value="${target}" ${value === target ? "selected" : ""}>${target === "left" ? "左侧人物" : target === "right" ? "右侧人物" : `人物 ${target.split("-")[1]}`}</option>`).join("");
-    const review = selected?.review || {};
-    const qcItems = [
-      ["identity", "身份一致"],
-      ["crossFace", "无串脸"],
-      ["hands", "手部正确"],
-      ["actionMatch", "动作匹配"],
-      ["prop", "道具接触"],
-      ["backgroundDrift", "背景稳定"],
-      ["blackBars", "无黑边"],
-      ["subtitleSafety", "字幕安全"],
-      ["audioSync", "音画同步"]
-    ];
+    const firstShot = report.shots[0] || {};
+    const imagePrompt = buildReferenceImagePrompt(firstShot, state);
+    const videoPrompt = buildReplacementVideoPrompt(
+      firstShot,
+      state,
+      firstShot.mapping || project?.remixTargets || {}
+    );
     return `<div class="stack">
-      <section class="card card-pad"><div class="section-title"><div><h2>明确替换哪个人物</h2><p>先绑定角色，再逐镜生成；同一个目标不能分给男女主两人</p></div><span class="badge gold">${remixShots.length} 镜</span></div>
-        <div class="project-brief"><div class="field"><label>男主角替换目标</label><select class="select" data-remix-groom-target>${targetOptions(project?.remixTargets?.groom || "left")}</select></div><div class="field"><label>女主角替换目标</label><select class="select" data-remix-bride-target>${targetOptions(project?.remixTargets?.bride || "right")}</select></div><div class="field"><label>参考片开始秒</label><input class="input" type="number" min="0" step="0.1" data-remix-range-start value="${esc(project?.remixRange?.start ?? Math.max(0, Number(template?.duration || 40) - 40))}" /></div><div class="field"><label>参考片结束秒</label><input class="input" type="number" min="0.5" step="0.1" data-remix-range-end value="${esc(project?.remixRange?.end ?? template?.duration ?? 40)}" /></div></div>
-        <button class="button primary" style="margin-top:14px;" data-action="save-remix-targets" data-template-id="${template?.id || ""}" ${analysis ? "" : "disabled"}>${icon("shield")}保存人物目标与复刻区间</button>
+      <section class="card card-pad">
+        <div class="section-title"><div><h2>参考片结构报告</h2><p>${report.shots.length} 个镜头 · ${report.totalFramesAt24} 帧 · 24 FPS</p></div><button class="button primary small-button" data-action="remix-analyze" data-template-id="${template?.id || ""}" ${extraction ? "" : "disabled"}>${icon("sparkle")}${analysis ? "重新分析" : "开始分析"}</button></div>
+        ${analysis?.warnings?.length ? `<div class="notice red" style="margin-bottom:12px;">${icon("shield")}<div><strong>分析缺口</strong>${analysis.warnings.map(esc).join("<br />")}</div></div>` : ""}
+        <div class="remix-report-list">${report.shots.length ? report.shots.map((shot) => `
+          <article class="remix-report-card">
+            <div class="remix-report-head"><strong>${esc(shot.shotId)}</strong><span>${Number(shot.time.start).toFixed(2)}–${Number(shot.time.end).toFixed(2)} 秒 · ${shot.time.framesAt24} 帧</span></div>
+            <p>${esc(shot.visual.action || "等待画面动作分析")}</p>
+            <div class="chip-row"><span class="chip">${esc(shot.visual.camera || "运镜待分析")}</span><span class="chip">${esc(shot.visual.background || "场景待分析")}</span><span class="chip">图一→${esc(shot.mapping.groom || "未绑定")}</span><span class="chip">图二→${esc(shot.mapping.bride || "未绑定")}</span></div>
+            ${shot.subtitles?.length ? `<small>${shot.subtitles.map((cue) => esc(cue.text || "")).join(" / ")}</small>` : ""}
+          </article>`).join("") : '<div class="empty-state"><div><div class="empty-state-symbol">析</div><h3>尚无镜头报告</h3><p>先完成提取和结构分析。</p></div></div>'}</div>
       </section>
-      <section class="card card-pad"><div class="section-title"><div><h2>逐镜人物替换</h2><p>每个镜头使用自己的模板区间和提示词版本</p></div></div>
-        ${selected ? `<div class="project-brief"><div class="field"><label>当前镜头</label><select class="select" data-shot-select>${remixShots.map((shot) => `<option value="${shot.id}" ${shot.id === selected.id ? "selected" : ""}>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒 · ${shot.status}</option>`).join("")}</select></div><div class="field"><label>本镜男主目标</label><select class="select" data-shot-groom-target>${targetOptions(selected.characters?.groom?.target || "left")}</select></div><div class="field"><label>本镜女主目标</label><select class="select" data-shot-bride-target>${targetOptions(selected.characters?.bride?.target || "right")}</select></div><div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div></div><textarea class="textarea" data-video-prompt style="min-height:190px;margin-top:12px;">${esc(buildReplacementPrompt(selected))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button ghost small-button" data-action="build-replacement-prompt">重新生成提示词</button><button class="button primary" data-action="generate-template-shot" ${template ? "" : "disabled"}>提交当前镜头替换</button></div>` : '<p class="small muted">请先保存人物目标与复刻区间，系统会建立最多 8 个连续镜头。</p>'}
-      </section>
-      ${selected ? `<section class="card card-pad"><div class="section-title"><div><h2>镜头 ${String(selected.order).padStart(2, "0")} 人工质检</h2><p>技术生成成功不等于人工审核通过</p></div><span class="badge ${shotReviewComplete(review) ? "green" : "gray"}">${shotReviewComplete(review) ? "已通过" : "待复核"}</span></div><div class="checklist">${qcItems.map(([key, label]) => `<label class="check-item"><input type="checkbox" data-qc-check="${key}" ${review[key] === "passed" ? "checked" : ""} /><div class="check-copy"><strong>${label}</strong><small>${review[key] === "passed" ? "已通过" : "请实际观看后确认"}</small></div></label>`).join("")}</div><button class="button primary" style="width:100%;margin-top:14px;" data-action="save-shot-qc" data-mode="remix" data-shot-id="${selected.id}">保存本镜人工审核</button></section>` : ""}
+      <div class="content-grid">
+        <section class="card card-pad"><div class="section-title"><div><h3>音频分析提示词</h3><p>保留原始时间码</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-audio-prompt]">复制</button></div><textarea class="textarea" data-remix-audio-prompt readonly style="min-height:170px;">${esc(buildAudioAnalysisPrompt(report))}</textarea></section>
+        <section class="card card-pad"><div class="section-title"><div><h3>图片生成提示词</h3><p>图一与图二身份锚点</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-image-prompt]">复制</button></div><textarea class="textarea" data-remix-image-prompt readonly style="min-height:170px;">${esc(imagePrompt)}</textarea></section>
+      </div>
+      <section class="card card-pad"><div class="section-title"><div><h3>视频替换提示词</h3><p>人物、道具、动作和背景约束</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-video-prompt]">复制</button></div><textarea class="textarea" data-remix-video-prompt readonly style="min-height:200px;">${esc(videoPrompt)}</textarea></section>
     </div>`;
   }
-  const exports = runtime.assets.filter((asset) => asset.kind === "export");
+
+  if (number === 3) {
+    const hasIdentities = Boolean(
+      state.photoAssetIds?.groom && state.photoAssetIds?.bride
+    );
+    return `<div class="stack">
+      <section class="card card-pad">
+        <div class="section-title"><div><h2>身份锚点与批量数量</h2><p>先把男女主照片和复刻镜头准备好，再提交付费批量任务</p></div><span class="badge ${hasIdentities ? "green" : "red"}">${hasIdentities ? "身份照片就绪" : "缺少身份照片"}</span></div>
+        <div class="remix-identity-row">
+          <div class="remix-identity-card">${state.photos.groom ? `<img src="${esc(api.mediaUrl(state.photos.groom))}" alt="${esc(state.groom)}" />` : "男" }<strong>图一 · ${esc(state.groom)}</strong></div>
+          <div class="remix-identity-card">${state.photos.bride ? `<img src="${esc(api.mediaUrl(state.photos.bride))}" alt="${esc(state.bride)}" />` : "女" }<strong>图二 · ${esc(state.bride)}</strong></div>
+          <div class="remix-identity-note"><strong>${imageModel?.label || "未配置图片模型"}</strong><small>${imageModel?.status === "ready" ? "模型已配置" : "请到模型中心配置图片模型"}</small><button class="text-button" data-route="models">模型中心 →</button></div>
+        </div>
+        ${!remixShots.length ? `<div class="notice red" style="margin-top:14px;">${icon("shield")}<div><strong>尚未建立复刻镜头</strong><p>使用下方默认人物目标建立镜头计划后，才能按镜分配 24 张候选图。</p></div></div>` : ""}
+        <div class="project-brief" style="margin-top:14px;">
+          <div class="field"><label>男主角目标</label><select class="select" data-remix-groom-target>${remixTargetOptions(project?.remixTargets?.groom || "left")}</select></div>
+          <div class="field"><label>女主角目标</label><select class="select" data-remix-bride-target>${remixTargetOptions(project?.remixTargets?.bride || "right")}</select></div>
+          <div class="field"><label>批量总数</label><select class="select" data-batch-count><option value="12">12 张</option><option value="24" selected>24 张</option><option value="36">36 张</option><option value="48">48 张</option></select></div>
+          <div class="field"><label>每张确认单价</label><input class="input" type="number" min="0" step="0.0001" data-batch-unit-cost placeholder="模型中心未配置时请填写" /></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+          <button class="button ghost" data-action="prepare-remix-shots" data-template-id="${template?.id || ""}" ${analysis ? "" : "disabled"}>建立 8 个复刻镜头</button>
+          <button class="button secondary" data-action="estimate-image-batch">预估费用</button>
+        </div>
+        <div class="remix-shot-picker">
+          ${remixShots.length ? remixShots.map((shot) => `<label><input type="checkbox" data-batch-shot value="${shot.id}" checked /><span>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒</span></label>`).join("") : '<p class="small muted">建立镜头计划后会显示可批量生成的镜头。</p>'}
+        </div>
+        ${remixBatchEstimate ? `<div class="remix-estimate"><strong>${esc(remixBatchEstimate.confirmationText)}</strong><small>${remixBatchEstimate.requiresQuote ? "未填写单价，不能提交" : "确认后可创建幂等批量任务"}</small></div>` : ""}
+        <label class="check-item" style="margin-top:12px;"><input type="checkbox" data-batch-confirm /><div class="check-copy"><strong>我已确认模型、数量和费用</strong><small>任务不会自动重复提交。</small></div></label>
+        <button class="button primary" style="width:100%;margin-top:12px;" data-action="submit-image-batch" ${hasIdentities && remixShots.length && imageModel ? "" : "disabled"}>${icon("sparkle")}${remixBatchJobId ? "提交另一批候选" : "提交批量生图"}</button>
+      </section>
+      <section class="card card-pad"><div class="section-title"><div><h3>角色图候选</h3><p>生成和上传结果都进入当前项目资产库</p></div><span class="badge gold">${roleImageAssets.length} 张</span></div>${renderImageAssets(roleImageAssets.slice(0, 24))}</section>
+    </div>`;
+  }
+
+  if (number === 4) {
+    const review = selected?.review || {};
+    const qcItems = remixReviewItems();
+    const prop = project?.remixProps?.[0] || {};
+    return `<div class="stack">
+      <section class="card card-pad"><div class="section-title"><div><h2>人物、道具与镜头映射</h2><p>图一对应男主，图二对应女主；男女主不能绑定同一个人物目标</p></div><span class="badge gold">${remixShots.length} 镜</span></div>
+        <div class="project-brief"><div class="field"><label>男主角替换目标</label><select class="select" data-remix-groom-target>${remixTargetOptions(project?.remixTargets?.groom || "left")}</select></div><div class="field"><label>女主角替换目标</label><select class="select" data-remix-bride-target>${remixTargetOptions(project?.remixTargets?.bride || "right")}</select></div><div class="field"><label>参考片开始秒</label><input class="input" type="number" min="0" step="0.1" data-remix-range-start value="${esc(project?.remixRange?.start ?? Math.max(0, Number(template?.duration || 40) - 40))}" /></div><div class="field"><label>参考片结束秒</label><input class="input" type="number" min="0.5" step="0.1" data-remix-range-end value="${esc(project?.remixRange?.end ?? template?.duration ?? 40)}" /></div></div>
+        <button class="button primary" style="margin-top:14px;" data-action="save-remix-targets" data-template-id="${template?.id || ""}" ${analysis ? "" : "disabled"}>${icon("shield")}保存人物目标与复刻区间</button>
+        <div class="divider"></div>
+        <div class="section-title"><div><h3>道具替换</h3><p>可把伞、花、戒指或礼物替换为项目素材</p></div></div>
+        <div class="project-brief"><div class="field"><label>原画面道具位置</label><input class="input" data-prop-target value="${esc(prop.target || "")}" placeholder="例如：左手红伞" /></div><div class="field"><label>项目图片资产</label><select class="select" data-prop-source><option value="">保持原道具</option>${roleImageAssets.map((asset) => `<option value="${asset.id}" ${prop.sourceAssetId === asset.id ? "selected" : ""}>${esc(asset.title || asset.id)}</option>`).join("")}</select></div><div class="field"><label>替换说明</label><input class="input" data-prop-description value="${esc(prop.description || "")}" placeholder="例如：替换为红玫瑰捧花" /></div></div>
+        <button class="button secondary" style="margin-top:10px;" data-action="save-remix-props">保存道具映射</button>
+      </section>
+      <section class="card card-pad"><div class="section-title"><div><h2>逐镜替换</h2><p>生成视频或导入外部完成的人物替换片段</p></div></div>
+        ${selected ? `<div class="project-brief"><div class="field"><label>当前镜头</label><select class="select" data-shot-select>${remixShots.map((shot) => `<option value="${shot.id}" ${shot.id === selected.id ? "selected" : ""}>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒 · ${shot.status}</option>`).join("")}</select></div><div class="field"><label>本镜男主目标</label><select class="select" data-shot-groom-target>${remixTargetOptions(selected.characters?.groom?.target || "left")}</select></div><div class="field"><label>本镜女主目标</label><select class="select" data-shot-bride-target>${remixTargetOptions(selected.characters?.bride?.target || "right")}</select></div><div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div></div><textarea class="textarea" data-video-prompt style="min-height:190px;margin-top:12px;">${esc(buildReplacementPrompt(selected))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button ghost small-button" data-action="build-replacement-prompt">重新生成提示词</button><button class="button primary" data-action="generate-template-shot" ${template && videoModel?.status === "ready" ? "" : "disabled"}>提交当前镜头替换</button><label class="button secondary small-button">导入替换视频<input class="visually-hidden" type="file" accept="video/mp4,video/quicktime,video/webm" data-replacement-video-input data-shot-id="${selected.id}" /></label></div>` : '<p class="small muted">请先保存人物目标与复刻区间，系统会建立最多 8 个连续镜头。</p>'}
+      </section>
+      ${selected ? `<section class="card card-pad"><div class="section-title"><div><h2>镜头 ${String(selected.order).padStart(2, "0")} 九项人工质检</h2><p>技术成功不等于人工审核通过</p></div><span class="badge ${shotReviewComplete(review) ? "green" : "gray"}">${shotReviewComplete(review) ? "已通过" : "待复核"}</span></div><div class="checklist">${qcItems.map(([key, label]) => `<label class="check-item"><input type="checkbox" data-qc-check="${key}" ${review[key] === "passed" ? "checked" : ""} /><div class="check-copy"><strong>${label}</strong><small>${review[key] === "passed" ? "已通过" : "请实际观看后确认"}</small></div></label>`).join("")}</div><button class="button primary" style="width:100%;margin-top:14px;" data-action="save-shot-qc" data-mode="remix" data-shot-id="${selected.id}">保存九项审核</button></section>` : ""}
+    </div>`;
+  }
+
+  const exports = runtime.assets.filter(
+    (asset) => asset.kind === "export" && asset.projectId === currentProjectId
+  );
   const approvedShots = remixShots.filter((shot) => shot.status === "approved").length;
   return `<div class="content-grid">
-    <section class="card card-pad"><div class="section-title"><div><h2>封装当前复刻时间轴</h2><p>${state.duration} 秒 · ${Math.round(state.duration * 24)} 帧 · ${approvedShots}/${remixShots.length} 镜已批准</p></div><span class="badge ${approvedShots === remixShots.length && remixShots.length ? "green" : "gray"}">${approvedShots === remixShots.length && remixShots.length ? "可成片" : "等待逐镜审核"}</span></div><div class="notice red">${icon("shield")}<div><strong>只合成当前批准镜头</strong>原始声音按所选参考区间进入时间轴；字幕未通过安全校验时不允许交付。</div></div><textarea class="textarea" data-speech-text style="min-height:100px;margin-top:14px;">${esc((analysis?.audio?.transcript || []).map((item) => item.text || item).join("。"))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="button secondary" data-action="generate-subtitles">生成当前字幕</button><button class="button primary" data-action="render-project">${icon("play")}生成当前时间轴成片</button></div></section>
-    <section class="card card-pad"><div class="section-title"><div><h3>最近成片</h3><p>正式交付前请完整观看</p></div></div>${renderVideoAssets(exports.slice(0,4))}</section>
+    <section class="card card-pad"><div class="section-title"><div><h2>原轨道对齐与封装</h2><p>${state.duration} 秒 · ${Math.round(state.duration * 24)} 帧 · ${approvedShots}/${remixShots.length} 镜已批准</p></div><span class="badge ${approvedShots === remixShots.length && remixShots.length ? "green" : "gray"}">${approvedShots === remixShots.length && remixShots.length ? "可成片" : "等待逐镜审核"}</span></div><div class="notice red">${icon("shield")}<div><strong>原音频与原字幕是时间基准</strong>替换镜头必须回到各自区间，不能移动整片音乐和字幕。</div></div><div class="remix-track-summary"><div><strong>原音频</strong><small>${project?.timelineSelection?.musicAssetId ? "已绑定" : "待绑定"}</small></div><div><strong>字幕轨</strong><small>${project?.timelineSelection?.subtitleAssetId ? "已绑定" : "可重新生成"}</small></div><div><strong>时间轴</strong><small>${state.duration} 秒 / ${Math.round(state.duration * 24)} 帧</small></div></div><textarea class="textarea" data-speech-text style="min-height:100px;margin-top:14px;">${esc((analysis?.audio?.transcript || []).map((item) => item.text || item).join("。"))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="button secondary" data-action="generate-subtitles">生成当前字幕</button><button class="button primary" data-action="render-project">${icon("play")}生成当前时间轴成片</button></div></section>
+    <section class="card card-pad"><div class="section-title"><div><h3>预览与交付</h3><p>正式交付前必须完整观看</p></div></div>${renderVideoAssets(exports.slice(0, 4))}<button class="button ghost" style="width:100%;margin-top:12px;" data-route="export">打开交付中心</button></section>
   </div>`;
 }
 
@@ -3669,6 +3773,23 @@ document.addEventListener("change", async (event) => {
     }
   }
 
+  if (event.target.matches("[data-replacement-video-input]")) {
+    const file = event.target.files?.[0];
+    const shotId = event.target.dataset.shotId;
+    if (file && shotId) {
+      event.target.disabled = true;
+      try {
+        await api.importReplacementVideo(currentProjectId, shotId, file);
+        await refreshRuntime();
+        showToast("替换视频已导入，旧审核已失效，请重新完成九项检查");
+      } catch (error) {
+        showToast(error.message || "替换视频导入失败");
+      } finally {
+        event.target.disabled = false;
+      }
+    }
+  }
+
   if (event.target.dataset.field) {
     saveState({ quiet: true });
   }
@@ -3867,6 +3988,132 @@ async function handleAction(button) {
     });
     await trackJob(result.job.id, "视频生成");
     await refreshRuntime();
+  }
+  if (action === "copy-remix-prompt") {
+    const selector = button.dataset.promptSelector;
+    const text = selector
+      ? document.querySelector(selector)?.value || ""
+      : "";
+    if (!text) {
+      showToast("当前提示词尚未生成");
+      return;
+    }
+    await copyText(text);
+  }
+  if (action === "prepare-remix-shots") {
+    const templateId = button.dataset.templateId || currentRemixTemplate()?.id;
+    const template = currentRemixTemplate();
+    const groom =
+      document.querySelector("[data-remix-groom-target]")?.value || "left";
+    const bride =
+      document.querySelector("[data-remix-bride-target]")?.value || "right";
+    if (!templateId || !template?.remixAnalysis) {
+      showToast("请先完成参考片结构分析");
+      return;
+    }
+    const result = await api.updateRemixTargets(currentProjectId, {
+      templateId,
+      groom,
+      bride,
+      remixRange: {
+        start: Math.max(
+          0,
+          Number(runtime.projects.find((item) => item.id === currentProjectId)?.remixRange?.start) ||
+            Math.max(0, Number(template.duration || 40) - 40)
+        ),
+        end:
+          Number(runtime.projects.find((item) => item.id === currentProjectId)?.remixRange?.end) ||
+          Number(template.duration || 40)
+      }
+    });
+    state.mode = "remix";
+    state.remixTargets = { groom, bride };
+    state.remixRange = result.item.remixRange;
+    storyboard = result.shots || [];
+    remixSelectedShotId = storyboard[0]?.id || "";
+    await refreshRuntime();
+    showToast(`已建立 ${storyboard.length} 个复刻镜头`);
+  }
+  if (action === "estimate-image-batch") {
+    const model = defaultModel("image");
+    if (!model) {
+      showToast("请先在模型中心配置图片模型");
+      return;
+    }
+    const count = Number(
+      document.querySelector("[data-batch-count]")?.value || 24
+    );
+    const rawUnitCost = document
+      .querySelector("[data-batch-unit-cost]")
+      ?.value.trim();
+    const result = await api.estimateGeneration({
+      category: "image",
+      modelId: model.id,
+      count,
+      unitCost: rawUnitCost === "" ? null : Number(rawUnitCost)
+    });
+    remixBatchEstimate = result.item;
+    render();
+  }
+  if (action === "submit-image-batch") {
+    const model = defaultModel("image");
+    const confirmed = Boolean(
+      document.querySelector("[data-batch-confirm]")?.checked
+    );
+    const shotIds = [...document.querySelectorAll("[data-batch-shot]:checked")].map(
+      (input) => input.value
+    );
+    const count = Number(
+      document.querySelector("[data-batch-count]")?.value || 24
+    );
+    if (!model) {
+      showToast("请先配置图片模型");
+      return;
+    }
+    if (!confirmed) {
+      showToast("请先确认模型、数量和费用");
+      return;
+    }
+    if (!shotIds.length) {
+      showToast("请至少选择一个复刻镜头");
+      return;
+    }
+    if (!remixBatchEstimate || remixBatchEstimate.requiresQuote) {
+      showToast("请先完成费用预估并填写单价");
+      return;
+    }
+    button.dataset.idempotencyKey ||=
+      globalThis.crypto?.randomUUID?.() || `batch-${Date.now()}`;
+    button.disabled = true;
+    const result = await api.createImageBatch(
+      currentProjectId,
+      {
+        modelId: model.id,
+        shotIds,
+        totalCount: count,
+        versionsPerShot: Math.max(1, Math.round(count / shotIds.length)),
+        unitCost: remixBatchEstimate.unitCost,
+        confirmed: true
+      },
+      button.dataset.idempotencyKey
+    );
+    remixBatchJobId = result.job.id;
+    await trackJob(result.job.id, "批量角色图生成");
+    await refreshRuntime();
+  }
+  if (action === "save-remix-props") {
+    const sourceAssetId =
+      document.querySelector("[data-prop-source]")?.value || "";
+    const target =
+      document.querySelector("[data-prop-target]")?.value.trim() || "";
+    const description =
+      document.querySelector("[data-prop-description]")?.value.trim() || "";
+    const remixProps = sourceAssetId
+      ? [{ target, sourceAssetId, description }]
+      : [];
+    await api.updateProject(currentProjectId, { remixProps });
+    await refreshRuntime();
+    showToast(sourceAssetId ? "道具替换映射已保存" : "已恢复保持原道具");
   }
   if (action === "remix-extract") {
     const templateId = button.dataset.templateId;
@@ -4331,6 +4578,11 @@ async function handleAction(button) {
     const url = document.querySelector("[data-template-url]")?.value.trim();
     if (!url) {
       showToast("请先粘贴抖音视频链接");
+      return;
+    }
+    const rights = document.querySelector("[data-remix-rights]");
+    if (rights && !rights.checked) {
+      showToast("请先确认参考片使用权");
       return;
     }
     const result = await api.importTemplateUrl(url);

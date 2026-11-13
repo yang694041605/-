@@ -348,3 +348,47 @@ test("三级至五级导航可跳转，图片可放大预览并显示保存删�
     await stopServer(server, temp);
   }
 });
+
+test("抖音复刻显示五个直接步骤并打开对应页面", { timeout: 40000 }, async (t) => {
+  const browser = await findBrowser();
+  if (!browser) {
+    t.skip("未找到 Playwright Chromium Headless Shell");
+    return;
+  }
+  const { child: server, temp, base } = await startServer();
+  let page = null;
+  try {
+    page = await openCdpPage(browser, `${base}/#/remix`);
+    await waitForBrowser(
+      page.evaluate,
+      `Boolean(document.querySelector('.top-tab[data-route="remix"]'))`
+    );
+    await page.evaluate(
+      `document.querySelector('.top-tab[data-route="remix"]').click(); true`
+    );
+    await waitForBrowser(
+      page.evaluate,
+      `document.querySelectorAll('[data-nav-id^="remix-step-"]').length === 5`
+    );
+
+    const pages = [
+      ["#/remix/step/1", "抖音链接下载"],
+      ["#/remix/step/2", "参考片结构报告"],
+      ["#/remix/step/3", "身份锚点与批量数量"],
+      ["#/remix/step/4", "人物、道具与镜头映射"],
+      ["#/remix/step/5", "原轨道对齐与封装"]
+    ];
+    for (const [hash, title] of pages) {
+      await page.evaluate(`location.hash = ${JSON.stringify(hash)}; true`);
+      await waitForBrowser(
+        page.evaluate,
+        `document.body.innerText.includes(${JSON.stringify(title)})`
+      );
+    }
+    assert.deepEqual(page.exceptions, []);
+    page.close();
+  } finally {
+    page?.child?.kill();
+    await stopServer(server, temp);
+  }
+});
