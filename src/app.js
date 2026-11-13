@@ -303,7 +303,7 @@ const LEGACY_NAV_TREE = [
   }
 ];
 
-const LEGACY_MAIN_NAV_TREE = [
+const LEGACY_MAIN_NAV_TREE = () => [
   {
     id: "material-center",
     label: "素材中心",
