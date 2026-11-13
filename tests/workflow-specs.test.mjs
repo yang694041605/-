@@ -52,7 +52,14 @@ test("每个步骤都有第四级分类和第五级可点击功能", () => {
     assert.ok(
       level4
         .flatMap((group) => group.children)
-        .every((item) => item.route === `step${number}` && item.target)
+        .every(
+          (item) =>
+            item.route === `step${number}` &&
+            item.target &&
+            item.children.length === 1 &&
+            item.children[0].route === `step${number}` &&
+            item.children[0].target === item.target
+        )
     );
   }
 });

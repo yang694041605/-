@@ -25,6 +25,7 @@ import {
   getWorkflowStep,
   workflowStepGaps
 } from "./workflow-specs.mjs";
+import { buildWeddingNavigationTree } from "./wedding-navigation.mjs";
 
 const STORAGE_KEY = "xying-wedding-film-studio-v1";
 
@@ -302,7 +303,7 @@ const LEGACY_NAV_TREE = [
   }
 ];
 
-const NAV_TREE = [
+const LEGACY_MAIN_NAV_TREE = [
   {
     id: "material-center",
     label: "素材中心",
@@ -402,6 +403,8 @@ const NAV_TREE = [
     route: "guide"
   }
 ];
+
+const NAV_TREE = buildWeddingNavigationTree();
 
 const ROUTE_META = {
   overview: ["项目工作台", "把真实故事，拍成只属于你们的一部电影"],
@@ -656,6 +659,35 @@ const VVV_STYLE_PRESETS = [
     image: "./public/vvv-templates/memoir.jpg"
   }
 ];
+
+const WEDDING_REFERENCE_IMAGES = {
+  ancientBride: "./public/wedding-assets/ancient-bride-reference.jpg",
+  ancientCouple: "./public/wedding-assets/ancient-courtyard-couple.jpg",
+  ancientLantern: "./public/wedding-assets/ancient-lantern-couple.jpg",
+  ancientRoof: "./public/wedding-assets/ancient-roof.jpg",
+  groomModern: "./public/wedding-assets/groom-style-reference.jpg",
+  republicCouple: "./public/wedding-assets/republic-couple.jpg",
+  republicStreet: "./public/wedding-assets/republic-street.jpg",
+  modernCouple: "./public/wedding-assets/modern-couple.jpg",
+  ancientHall: "./public/wedding-assets/ancient-courtyard.jpg"
+};
+
+function weddingLookReference(look) {
+  if (look.imagePath) return { src: api.mediaUrl(look.imagePath), source: "generated" };
+  if (look.era === "ancient") {
+    return {
+      src: look.gender === "female" ? WEDDING_REFERENCE_IMAGES.ancientBride : WEDDING_REFERENCE_IMAGES.ancientCouple,
+      source: "reference"
+    };
+  }
+  if (look.era === "republic") {
+    return { src: WEDDING_REFERENCE_IMAGES.republicCouple, source: "reference" };
+  }
+  return {
+    src: look.gender === "female" ? WEDDING_REFERENCE_IMAGES.modernCouple : WEDDING_REFERENCE_IMAGES.groomModern,
+    source: "reference"
+  };
+}
 
 let state = loadState();
 let activeRouteInfo = parseRouteHash(window.location.hash);
@@ -1555,6 +1587,51 @@ function workflowStepGuide(number) {
     </section>`;
 }
 
+function workflowVisualReferences(number) {
+  const groups = {
+    1: [
+      [WEDDING_REFERENCE_IMAGES.groomModern, "男主造型参考", "仅参考构图与礼服，真人身份以客户照片为准"],
+      [WEDDING_REFERENCE_IMAGES.ancientBride, "女主造型参考", "仅参考婚服和妆造，真人身份以客户照片为准"]
+    ],
+    6: [
+      [WEDDING_REFERENCE_IMAGES.ancientCouple, "古代镜头参考", "庭院双人、牵手与家族站位"],
+      [WEDDING_REFERENCE_IMAGES.republicCouple, "民国镜头参考", "民国学生装与雨巷构图"],
+      [WEDDING_REFERENCE_IMAGES.republicStreet, "民国雨夜场景", "长街、路灯与雨夜氛围"],
+      [WEDDING_REFERENCE_IMAGES.modernCouple, "今生镜头参考", "现代礼服与婚礼现场构图"]
+    ],
+    7: [
+      [WEDDING_REFERENCE_IMAGES.ancientBride, "古代女主", "凤冠与红金婚服提示"],
+      [WEDDING_REFERENCE_IMAGES.groomModern, "男主定妆", "人物正面与礼服参考"],
+      [WEDDING_REFERENCE_IMAGES.republicCouple, "民国造型", "时代服装与颜色参考"]
+    ],
+    8: [
+      [WEDDING_REFERENCE_IMAGES.ancientLantern, "古代夜戏", "灯笼、侧光和场景连续参考"],
+      [WEDDING_REFERENCE_IMAGES.republicCouple, "民国白天", "街巷和服装参考"],
+      [WEDDING_REFERENCE_IMAGES.republicStreet, "民国雨夜", "环境、灯光和道具参考"],
+      [WEDDING_REFERENCE_IMAGES.modernCouple, "今生婚礼", "现代现场与礼服参考"]
+    ],
+    9: [
+      [WEDDING_REFERENCE_IMAGES.ancientCouple, "动作起点参考", "双人站位、距离与牵手方向"],
+      [WEDDING_REFERENCE_IMAGES.ancientRoof, "建筑连续性", "屋顶、透视和时代材质"]
+    ],
+    10: [
+      [WEDDING_REFERENCE_IMAGES.ancientHall, "东方弦乐氛围", "红柱、烛光与低频氛围"],
+      [WEDDING_REFERENCE_IMAGES.modernCouple, "现代抒情氛围", "真实婚礼与温暖钢琴"]
+    ],
+    13: [
+      [WEDDING_REFERENCE_IMAGES.modernCouple, "字幕安全区参考", "字幕必须避开人物脸部和手部"],
+      [WEDDING_REFERENCE_IMAGES.ancientHall, "片尾落版参考", "姓名和婚期保持可读留白"]
+    ],
+    14: [
+      [WEDDING_REFERENCE_IMAGES.modernCouple, "成片封面参考", "用于交付缩略图和试听页"],
+      [WEDDING_REFERENCE_IMAGES.ancientCouple, "婚礼电影海报参考", "用于交付清单与归档"]
+    ]
+  };
+  const items = groups[number] || [];
+  if (!items.length) return "";
+  return `<section class="card card-pad workflow-visual-reference"><div class="section-title"><div><h3>本步图片参考</h3><p>现有真实参考图、客户上传和模型生成结果会在素材中心区分来源</p></div><span class="badge gold">${items.length} 张参考</span></div><div class="workflow-visual-grid">${items.map(([src, title, hint]) => `<figure><img src="${esc(src)}" alt="${esc(title)}" /><figcaption><strong>${esc(title)}</strong><small>${esc(hint)}</small></figcaption></figure>`).join("")}</div></section>`;
+}
+
 function workflowStepPage(number) {
   const step = WIZARD_STEPS[number - 1];
   const ready = workflowReady(number);
@@ -1573,6 +1650,7 @@ function workflowStepPage(number) {
         <button class="button ghost small-button" data-route="wizard">返回流程总览</button>
       </section>
       ${workflowStepGuide(number)}
+      ${workflowVisualReferences(number)}
       ${workflowStepContent(number)}
       <section class="step-confirm card">
         <div><strong>${ready ? "本步骤最低素材条件已满足" : "本步骤仍有材料缺口"}</strong><p>${ready ? "请先实际检查画面或试听，再确认进入下一步。确认记录会随项目保存。" : "返回本页上方或素材中心补齐必要材料后，确认按钮才会开放。"}</p></div>
@@ -1645,6 +1723,11 @@ function shotImageWorkbench(stepNumber, candidateShots, selected) {
     ["costume", "服装时代正确"],
     ["composition", "构图可继续生成视频"]
   ];
+  const conceptImage = String(shot.act || "").includes("古代")
+    ? WEDDING_REFERENCE_IMAGES.ancientCouple
+    : String(shot.act || "").includes("民国")
+      ? WEDDING_REFERENCE_IMAGES.republicCouple
+      : WEDDING_REFERENCE_IMAGES.modernCouple;
   return `
     <section class="card card-pad shot-image-workbench">
       <div class="section-title"><div><h2>第 ${stepNumber} 步 · 逐镜首帧生产</h2><p>图片提示词负责稳定瞬间，批准后的图片会成为第 9 步视频首帧</p></div><span class="badge ${shot.imageStatus === "approved" ? "green" : "gold"}">${shot.imageStatus === "approved" ? "首帧已批准" : "待生成和审核"}</span></div>
@@ -1652,6 +1735,7 @@ function shotImageWorkbench(stepNumber, candidateShots, selected) {
         <div class="field"><label>当前镜头</label><select class="select" data-shot-select>${candidateShots.map((item) => `<option value="${item.id}" ${item.id === shot.id ? "selected" : ""}>${String(item.order || item.number).padStart(2, "0")} · ${esc(item.title)} · ${item.imageStatus === "approved" ? "图片已通过" : "待图片"}</option>`).join("")}</select></div>
         <div class="field"><label>当前首帧版本</label><input class="input" readonly value="${esc(shot.assets?.firstFrame?.assetId || "尚未绑定")}" /></div>
       </div>
+      <figure class="shot-concept-reference"><img src="${esc(conceptImage)}" alt="${esc(shot.title)} 风格参考" /><figcaption><strong>本镜风格参考</strong><small>参考片抽帧，仅用于构图、服装和光线；真实人物身份必须取客户照片。</small></figcaption></figure>
       <div class="shot-reference-grid">${referenceAssets.map(([label, assetId]) => `<div class="shot-reference-item ${assetId ? "ready" : "missing"}"><span>${assetId ? "✓" : "!"}</span><div><strong>${esc(label)}</strong><small>${esc(assetId || "尚缺，先到素材中心补齐")}</small></div></div>`).join("")}</div>
       <label class="field" style="margin-top:14px;"><span class="field-label">图片提示词</span><textarea class="textarea prompt-composer" data-image-prompt>${esc(prompt)}</textarea><small class="field-hint">提示词描述一个稳定画面，不写镜头运动。绑定真实男女主照片是身份一致的前提。</small></label>
       <div class="model-config-actions">
@@ -2374,6 +2458,19 @@ function looksPage() {
         </section>
       </div>
       <section class="card card-pad" style="margin-top:18px;">
+        <div class="section-title"><div><h2>三生三世婚服与场景参考</h2><p>这些是现有参考片抽帧和免费生成的实际图片，只用于风格选择；客户真人身份必须上传本人照片</p></div><span class="badge gold">真实图片参考</span></div>
+        <div class="wedding-reference-grid">
+          ${[
+            [WEDDING_REFERENCE_IMAGES.ancientBride, "古代新娘婚服", "凤冠、霞帔、红金刺绣与端庄坐姿"],
+            [WEDDING_REFERENCE_IMAGES.ancientCouple, "古代双人构图", "庭院、亲属站位和牵手动作参考"],
+            [WEDDING_REFERENCE_IMAGES.republicCouple, "民国情侣造型", "学生装、旗袍、雨巷和书卷气质"],
+            [WEDDING_REFERENCE_IMAGES.modernCouple, "今生婚礼造型", "现代婚纱、礼服和真实婚礼现场"],
+            [WEDDING_REFERENCE_IMAGES.ancientHall, "古代婚堂空间", "红柱、灯笼、烛光与对称构图"],
+            [WEDDING_REFERENCE_IMAGES.ancientLantern, "古代夜景灯笼", "夜景侧光、灯笼道具与双人空间关系"]
+          ].map(([image, title, description]) => `<article class="asset-card card wedding-reference-card"><div class="asset-preview"><img src="${esc(image)}" alt="${esc(title)}" /></div><div class="asset-info"><strong>${esc(title)}</strong><small>${esc(description)}</small><button class="button ghost small-button" data-route="assets" style="margin-top:10px;">上传本单替换参考</button></div></article>`).join("")}
+        </div>
+      </section>
+      <section class="card card-pad" style="margin-top:18px;">
         <div class="section-title">
           <div><h2>${focus === "groom" ? "男主角" : "女主角"}造型库</h2><p>真实图片可上传，也可以直接用 Seedream 生成多种样式</p></div>
           <span class="badge gold">${runtime.looks.filter((item) => item.gender === lookGender).length} 套样式</span>
@@ -2382,16 +2479,18 @@ function looksPage() {
           ${runtime.looks
             .filter((look) => look.gender === lookGender)
             .map(
-              (look) => `
+              (look) => {
+                const visual = weddingLookReference(look);
+                return `
               <article class="asset-card card">
                 <div class="asset-preview">
-                  ${look.imagePath ? `<img src="${esc(api.mediaUrl(look.imagePath))}" alt="${esc(look.title)}" />` : `<span>${esc(look.title.slice(0, 1))}</span>`}
+                  <img src="${esc(visual.src)}" alt="${esc(look.title)}" />
                 </div>
                 <div class="asset-info">
                   <strong>${esc(look.title)}</strong>
                   <small>${esc(look.era)} · ${esc(look.description)}</small>
                   <div class="chip-row" style="margin-top:9px;">
-                    <span class="badge ${look.imagePath ? "green" : "gray"}">${look.imagePath ? "已生成" : "提示词已就绪"}</span>
+                    <span class="badge ${visual.source === "generated" ? "green" : "gold"}">${visual.source === "generated" ? "已生成" : "参考片风格图"}</span>
                   </div>
                   <div style="display:flex;gap:6px;margin-top:10px;">
                     <button class="button ${state.selectedLooks?.[focus] === look.id ? "primary" : "secondary"} small-button" data-action="select-look" data-look-id="${look.id}" data-focus="${focus}">${state.selectedLooks?.[focus] === look.id ? "已选用" : "选用此项"}</button>
@@ -2399,7 +2498,8 @@ function looksPage() {
                     <button class="button ghost small-button" data-action="generate-look" data-look-id="${look.id}" data-model-id="model-image-pollinations">FLUX 免费</button>
                   </div>
                 </div>
-              </article>`
+              </article>`;
+              }
             )
             .join("")}
         </div>
@@ -2410,9 +2510,9 @@ function looksPage() {
 
 function scenesPage() {
   const scenes = [
-    ["scene-a", "古代 · 东方庭院", "晨雾、廊桥、红绸、木格窗，建立前世宿命感。"],
-    ["scene-b", "民国 · 长街旧巷", "暖褐街灯、石板路、细雨，承担时间转场。"],
-    ["scene-c", "今生 · 婚礼正厅", "红烛、金色灯影、亲友席位，落到真实婚礼。"]
+    ["scene-a", "古代 · 东方庭院", "晨雾、廊桥、红绸、木格窗，建立前世宿命感。", WEDDING_REFERENCE_IMAGES.ancientCouple],
+    ["scene-b", "民国 · 长街旧巷", "暖褐街灯、石板路、细雨，承担时间转场。", WEDDING_REFERENCE_IMAGES.republicStreet],
+    ["scene-c", "今生 · 婚礼正厅", "红烛、金色灯影、亲友席位，落到真实婚礼。", WEDDING_REFERENCE_IMAGES.modernCouple]
   ];
   return `
     <div class="page">
@@ -2426,8 +2526,8 @@ function scenesPage() {
         <div class="scene-grid">
           ${scenes
             .map(
-              ([className, title, description]) => `
-              <button class="scene-card ${className}" data-action="select-scene" data-scene="${esc(title)}">
+              ([className, title, description, image]) => `
+              <button class="scene-card ${className}" data-action="select-scene" data-scene="${esc(title)}" style="background-image:linear-gradient(180deg,rgba(25,8,9,.08),rgba(25,8,9,.82)),url('${esc(image)}');background-size:cover;background-position:center;">
                 <div class="scene-card-content"><small>SCENE DESIGN</small><strong>${title}</strong><p>${description}</p></div>
               </button>`
             )

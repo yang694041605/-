@@ -3434,6 +3434,96 @@ small {
   font-weight: 700;
 }
 
+.wedding-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.wedding-reference-card .asset-preview {
+  min-height: 190px;
+}
+
+.wedding-reference-card .asset-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.workflow-visual-reference {
+  margin-bottom: 18px;
+}
+
+.workflow-visual-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workflow-visual-grid figure {
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.workflow-visual-grid img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.workflow-visual-grid figcaption {
+  padding: 12px;
+}
+
+.workflow-visual-grid figcaption strong,
+.workflow-visual-grid figcaption small {
+  display: block;
+}
+
+.shot-concept-reference {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.62fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  overflow: hidden;
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.shot-concept-reference img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.shot-concept-reference figcaption {
+  padding: 11px 14px 11px 0;
+}
+
+.shot-concept-reference strong,
+.shot-concept-reference small {
+  display: block;
+}
+
+.shot-concept-reference small {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.workflow-visual-grid figcaption small {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .nav-depth-4 > .nav-node {
   margin-left: 12px;
 }
@@ -3464,6 +3554,22 @@ small {
     grid-template-columns: 1fr 1fr;
   }
 
+  .wedding-reference-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .workflow-visual-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .shot-concept-reference {
+    grid-template-columns: 1fr;
+  }
+
+  .shot-concept-reference figcaption {
+    padding: 0 14px 14px;
+  }
+
   .model-editor-panel {
     position: static;
   }
@@ -3479,6 +3585,14 @@ small {
   }
 
   .step-guide-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wedding-reference-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-visual-grid {
     grid-template-columns: 1fr;
   }
 }

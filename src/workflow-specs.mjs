@@ -227,7 +227,15 @@ export function buildStepNavigationChildren(stepNumber) {
       id: `step-${step.number}-level5-${key}-${index + 1}`,
       label: item,
       route: step.route,
-      target: `step-${step.number}-${key}-${index + 1}`
+      target: `step-${step.number}-${key}-${index + 1}`,
+      children: [
+        {
+          id: `step-${step.number}-level6-${key}-${index + 1}`,
+          label: `打开：${item}`,
+          route: step.route,
+          target: `step-${step.number}-${key}-${index + 1}`
+        }
+      ]
     }))
   }));
 }

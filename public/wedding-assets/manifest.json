@@ -1,0 +1,102 @@
+{
+  "description": "婚礼微电影页面视觉参考。除注明外，人物均为参考片抽取画面，不代表当前客户真实身份。",
+  "assets": [
+    {
+      "file": "ancient-bride-reference.jpg",
+      "path": "/wedding-assets/ancient-bride-reference.jpg",
+      "title": "古代新娘造型参考",
+      "era": "ancient",
+      "source": "reference-video-frame"
+    },
+    {
+      "file": "groom-style-reference.jpg",
+      "path": "/wedding-assets/groom-style-reference.jpg",
+      "title": "新郎角色造型参考",
+      "era": "modern",
+      "source": "reference-video-frame"
+    },
+    {
+      "file": "ancient-courtyard-couple.jpg",
+      "path": "/wedding-assets/ancient-courtyard-couple.jpg",
+      "title": "古代庭院双人构图参考",
+      "era": "ancient",
+      "source": "reference-video-frame"
+    },
+    {
+      "file": "ancient-lantern-couple.jpg",
+      "path": "/wedding-assets/ancient-lantern-couple.jpg",
+      "title": "古代灯笼场景参考",
+      "era": "ancient",
+      "source": "reference-video-frame"
+    },
+    {
+      "file": "republic-couple.jpg",
+      "path": "/wedding-assets/republic-couple.jpg",
+      "title": "民国情侣造型参考",
+      "era": "republic",
+      "source": "reference-video-frame"
+    },
+    {
+      "file": "ancient-roof.jpg",
+      "path": "/wedding-assets/ancient-roof.jpg",
+      "title": "中式建筑屋顶参考",
+      "era": "ancient",
+      "source": "reference-video-frame"
+    },
+    {
+      "file": "modern-couple.jpg",
+      "path": "/wedding-assets/modern-couple.jpg",
+      "title": "今生婚礼双人构图参考",
+      "era": "modern",
+      "source": "reference-video-frame"
+    },
+    {
+      "file": "ancient-courtyard.jpg",
+      "path": "/wedding-assets/ancient-courtyard.jpg",
+      "title": "AI 生成的古代婚礼厅堂参考",
+      "era": "ancient",
+      "source": "pollinations-flux",
+      "note": "免费生成结果带第三方水印，仅用于界面风格参考，不作为正式成片素材"
+    },
+    {
+      "file": "republic-street.jpg",
+      "path": "/wedding-assets/republic-street.jpg",
+      "title": "民国婚礼长街参考",
+      "prompt": "Cinematic Republic-era Chinese street in gentle rain at dusk, stone pavement, vintage street lamps, wooden shop signs without readable text, umbrellas, warm brown and muted teal, romantic wedding film background, no people, no text, no watermark",
+      "source": "pollinations-flux",
+      "provider": "pollinations",
+      "model": "flux",
+      "generatedAt": "2026-11-13T01:22:18.896Z"
+    }
+  ],
+  "failures": [
+    {
+      "file": "modern-hall.jpg",
+      "title": "今生婚礼正厅参考",
+      "prompt": "Luxury modern Chinese wedding hall, red and gold decorations, floral aisle, candlelight, elegant stage, cinematic warm lighting, photorealistic wedding film background, no people, no text, no watermark",
+      "error": "Pollinations HTTP 402",
+      "failedAt": "2026-11-13T01:22:19.430Z"
+    },
+    {
+      "file": "hanfu-reference.jpg",
+      "title": "古代婚服参考",
+      "prompt": "Museum-quality traditional Chinese wedding hanfu displayed on an elegant mannequin, crimson silk, gold cloud embroidery, jade hair ornaments, front view, clean warm studio background, photorealistic fabric detail, no person, no text, no watermark",
+      "error": "Pollinations HTTP 402",
+      "failedAt": "2026-11-13T01:22:19.896Z"
+    },
+    {
+      "file": "republic-costume-reference.jpg",
+      "title": "民国青年造型参考",
+      "prompt": "Republic-era Chinese wedding attire reference display, male dark changshan and female pale blue student outfit with black skirt, period-accurate fabric, neutral warm studio, elegant mannequins without faces, no text, no watermark",
+      "error": "Pollinations HTTP 402",
+      "failedAt": "2026-11-13T01:22:20.371Z"
+    },
+    {
+      "file": "modern-wedding-reference.jpg",
+      "title": "现代婚礼礼服参考",
+      "prompt": "Modern Chinese wedding formalwear reference display, ivory bridal gown with lace and a black tuxedo, elegant mannequins without faces, warm editorial studio lighting, clean background, no text, no watermark",
+      "error": "Pollinations HTTP 402",
+      "failedAt": "2026-11-13T01:22:20.839Z"
+    }
+  ]
+}
