@@ -27,6 +27,11 @@ export const CHARACTER_SHEET_TEMPLATE_ID = "character-sheet-triple-view";
 export const DEFAULT_CHARACTER_SHEET_DESCRIPTION =
   "冷静敏锐的工程师与设备分析人员，负责检修观测节点，持续追查陨川与寂灯界信号。";
 
+export const SCENE_BOARD_TEMPLATE_ID = "scene-board-multi-view";
+
+export const DEFAULT_SCENE_BOARD_DESCRIPTION =
+  "中国古代客栈大堂内部全空，无人，挑高的木质梁柱结构，整齐摆放的深褐色实木方桌与长条木凳，桌上置有粗陶茶具，右侧是摆满酒坛的木质掌柜柜台，后方有通往二楼的木质阶梯与回廊扶手，雕花木窗透入明媚的自然斜射光束，梁上悬挂未点亮的红布灯笼，陈设古朴真实，photorealistic，high detail，professional photography，电影级光影，超写实CG渲染。";
+
 export function buildCharacterSheetPrompt({
   characterDescription = DEFAULT_CHARACTER_SHEET_DESCRIPTION
 } = {}) {
@@ -42,6 +47,24 @@ export function buildCharacterSheetPrompt({
     "【特写一致性】所有特写与左侧全身图为同一人物，相同光影和质感。",
     "【画质】高精度，细节极致，高分辨率角色设定图风格，纯白背景。",
     `【人物形象描述】${description}`
+  ].join("\n");
+}
+
+export function buildSceneBoardPrompt({
+  sceneDescription = DEFAULT_SCENE_BOARD_DESCRIPTION
+} = {}) {
+  const description =
+    String(sceneDescription || "").trim() || DEFAULT_SCENE_BOARD_DESCRIPTION;
+  return [
+    "场景图提示词模板：",
+    "【整体要求】16:9横版构图，纯白或极浅灰色背景，模块化分区布局，各区块需有清晰的中文小标题标识，包括多角度展示区、主视觉区域、光影氛围区、细节特写区、配色参考区。无水印、无多余装饰。所有视角与场景中的空间结构、家具陈设、材质质感、配色风格必须完全统一。",
+    "【顶部—多角度展示区】横向并排展示同一场景的四个视角，从左到右依次为「正视、侧视、俯视、仰视」，等高排列，完整呈现空间结构关系。",
+    "【左侧—光影氛围区】纵向排列同一场景在不同时间段的光影变化，从上到下依次为「白天、黄昏、夜晚」，体现自然光与人工光的氛围差异。",
+    "【中央—主视觉区域】场景的核心展示视角大图，构图饱满，景深清晰，作为整张参考图的视觉重心，完整呈现场景的空间感、材质与氛围。",
+    "【底部—细节特写区】横向并排四个特写模块，从左到右依次为「关键道具、材质纹理、装饰元素、局部细节」，展现场景中具有标志性的物件、表面质感与点睛元素。",
+    "【右侧—配色参考区】纵向三个色块，从上到下依次为「主色、辅色、点缀色」，每个色块旁标注名称，提取自场景的核心配色。",
+    "【画面要求】画面简洁，空间通透，材质真实，光影自然，超高清渲染，完美构图，各模块之间留有清晰的分隔留白。",
+    `【场景描述】${description}`
   ].join("\n");
 }
 

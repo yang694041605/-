@@ -294,7 +294,7 @@ async function handleApi(request, response, url) {
       assets,
       Number(project.timelineRevision) || 1
     );
-    const maxStep = projectView.mode === "remix" ? 4 : 14;
+    const maxStep = projectView.mode === "remix" ? 5 : 14;
     const approvalSnapshots = Object.fromEntries(
       Array.from({ length: maxStep }, (_, index) => {
         const step = index + 1;
@@ -422,7 +422,7 @@ async function handleApi(request, response, url) {
     const body = await readJson(request);
     const mode = body.mode === "remix" ? "remix" : "story";
     const step = Number(body.step);
-    const maximum = mode === "remix" ? 4 : 14;
+    const maximum = mode === "remix" ? 5 : 14;
     if (!Number.isInteger(step) || step < 1 || step > maximum) {
       return sendJson(response, 400, { ok: false, error: "确认步骤无效" });
     }

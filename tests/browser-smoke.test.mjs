@@ -437,9 +437,14 @@ test("自我生成只显示 14 个直接步骤且第 8 步提供批量生图工�
        Boolean(document.querySelector('[data-action="estimate-image-batch"]')) &&
        Boolean(document.querySelector('[data-batch-confirm]')) &&
        Boolean(document.querySelector('[data-action="submit-image-batch"]')) &&
-       Boolean(document.querySelector('[data-action="review-batch-image"]')) &&
        Boolean(document.querySelector('[data-character-sheet-template]')) &&
+       Boolean(document.querySelector('[data-scene-board-template]')) &&
        document.body.innerText.includes('批量生成分镜图片')`
+    );
+    await waitForBrowser(
+      page.evaluate,
+      `Boolean(document.querySelector('[data-action="review-batch-image"]'))`,
+      15000
     );
     await page.evaluate(`(() => {
       const details = document.querySelector('[data-character-sheet-template]');
@@ -450,6 +455,32 @@ test("自我生成只显示 14 个直接步骤且第 8 步提供批量生图工�
     await waitForBrowser(
       page.evaluate,
       `document.querySelector('[data-image-prompt]')?.value.includes('左侧三分之二区域')`
+    );
+    await page.evaluate(`(() => {
+      const details = document.querySelector('[data-scene-board-template]');
+      details.open = true;
+      details.querySelector('[data-action="apply-scene-board-template"]').click();
+      return true;
+    })()`);
+    await waitForBrowser(
+      page.evaluate,
+      `document.querySelector('[data-image-prompt]')?.value.includes('多角度展示区')`
+    );
+    await page.evaluate(`(() => {
+      const details = document.querySelector('[data-scene-board-template]');
+      details.open = true;
+      details.querySelector('[data-scene-board-description]').value = '自定义婚礼庭院场景板';
+      details.querySelector('[data-action="save-scene-board-template"]').click();
+      return true;
+    })()`);
+    await waitForBrowser(
+      page.evaluate,
+      `(async () => (await (await fetch('/api/bootstrap')).json()).projects.some((project) => project.id === 'project-default' && project.customPromptTemplates?.sceneBoard?.description === '自定义婚礼庭院场景板'))()`
+    );
+    await waitForBrowser(
+      page.evaluate,
+      `document.querySelector('[data-scene-board-template]')?.textContent.includes('当前项目模板保存于') &&
+       Boolean(document.querySelector('[data-action="review-batch-image"][data-review-status="approved"]'))`
     );
     await page.evaluate(
       `document.querySelector('[data-action="review-batch-image"][data-review-status="approved"]').click(); true`

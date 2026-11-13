@@ -4,6 +4,7 @@ import {
   buildImagePrompt,
   buildVideoPrompt,
   buildCharacterSheetPrompt,
+  buildSceneBoardPrompt,
   promptFingerprintInput
 } from "../src/prompt-library.mjs";
 
@@ -116,4 +117,26 @@ test("角色三视图模板包含全身三视图、局部特写和可编辑人�
     prompt,
     /眉眼特写（仅露出眉毛和眼睛区域，严禁出现完整面部、额头和鼻子）/
   );
+});
+
+test("场景图模板包含多视角、光影、主视觉、细节与配色模块", () => {
+  const prompt = buildSceneBoardPrompt({
+    sceneDescription: "中国古代婚礼庭院，红绸与灯笼，木质回廊。"
+  });
+  for (const label of [
+    "16:9横版构图",
+    "多角度展示区",
+    "正视、侧视、俯视、仰视",
+    "光影氛围区",
+    "白天、黄昏、夜晚",
+    "主视觉区域",
+    "细节特写区",
+    "关键道具、材质纹理、装饰元素、局部细节",
+    "配色参考区",
+    "主色、辅色、点缀色"
+  ]) {
+    assert.match(prompt, new RegExp(label));
+  }
+  assert.match(prompt, /中国古代婚礼庭院/);
+  assert.match(prompt, /【场景描述】/);
 });

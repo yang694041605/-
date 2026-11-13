@@ -18,8 +18,10 @@ import {
 import {
   buildCharacterSheetPrompt,
   buildImagePrompt,
+  buildSceneBoardPrompt,
   buildVideoPrompt,
-  DEFAULT_CHARACTER_SHEET_DESCRIPTION
+  DEFAULT_CHARACTER_SHEET_DESCRIPTION,
+  DEFAULT_SCENE_BOARD_DESCRIPTION
 } from "./prompt-library.mjs";
 import {
   WORKFLOW_SPECS,
@@ -2214,6 +2216,7 @@ function shotImageWorkbench(stepNumber, candidateShots, selected) {
       <div class="shot-reference-grid">${referenceAssets.map(([label, assetId]) => `<div class="shot-reference-item ${assetId ? "ready" : "missing"}"><span>${assetId ? "✓" : "!"}</span><div><strong>${esc(label)}</strong><small>${esc(assetId || "尚缺，先到素材中心补齐")}</small></div></div>`).join("")}</div>
       <label class="field" style="margin-top:14px;"><span class="field-label">图片提示词</span><textarea class="textarea prompt-composer" data-image-prompt>${esc(prompt)}</textarea><small class="field-hint">提示词描述一个稳定画面，不写镜头运动。绑定真实男女主照片是身份一致的前提。</small></label>
       ${characterSheetTemplateBlock("[data-image-prompt]")}
+      ${sceneBoardTemplateBlock("[data-image-prompt]")}
       <div class="model-config-actions">
         <button class="button ghost small-button" data-action="build-shot-image-prompt" data-shot-id="${shot.id}">重新生成图片提示词</button>
         <button class="button ghost small-button" data-action="copy-image-prompt">复制图片提示词</button>
@@ -2351,10 +2354,16 @@ function workflowStepContent(number) {
         <section class="card card-pad"><div class="section-title"><div><h3>已生成旁白</h3><p>${voiceAssets.length} 条</p></div></div>${renderAudioAssets(voiceAssets)}</section>
       </div>`,
     6: `
-      <section class="card card-pad">
-        <div class="section-title"><div><h2>按旁白节奏拆镜</h2><p>${storyboard.length} 镜 · ${state.duration} 秒 · ${state.duration * 24} 帧</p></div><button class="button secondary small-button" data-action="build-storyboard">重新推导</button><button class="button primary small-button" data-route="storyboard">打开完整分镜表</button></div>
-        <div class="generation-list">${storyboard.slice(0, 10).map((shot) => `<div class="generation-row"><div class="shot-number">${String(shot.number).padStart(2, "0")}</div><div class="generation-copy"><strong>${esc(shot.title)}</strong><small>${esc(shot.scene)} · ${esc(shot.shot)} · ${esc(shot.move)}</small></div><span class="generation-meta">${shot.duration}s</span><span class="generation-meta">${Math.round(shot.duration * 24)} 帧</span><span class="badge ${shot.status === "已确认" ? "green" : "gray"}">${shot.status}</span></div>`).join("")}</div>
-      </section>`,
+      <div class="stack">
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>按旁白节奏拆镜</h2><p>${storyboard.length} 镜 · ${state.duration} 秒 · ${state.duration * 24} 帧</p></div><button class="button secondary small-button" data-action="build-storyboard">重新推导</button><button class="button primary small-button" data-route="storyboard">打开完整分镜表</button></div>
+          <div class="generation-list">${storyboard.slice(0, 10).map((shot) => `<div class="generation-row"><div class="shot-number">${String(shot.number).padStart(2, "0")}</div><div class="generation-copy"><strong>${esc(shot.title)}</strong><small>${esc(shot.scene)} · ${esc(shot.shot)} · ${esc(shot.move)}</small></div><span class="generation-meta">${shot.duration}s</span><span class="generation-meta">${Math.round(shot.duration * 24)} 帧</span><span class="badge ${shot.status === "已确认" ? "green" : "gray"}">${shot.status}</span></div>`).join("")}</div>
+        </section>
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>场景板参考图</h2><p>先固定空间、材质、光影与配色，再进入镜头首帧</p></div><span class="badge gold">可保存模板</span></div>
+          ${sceneBoardTemplateBlock()}
+        </section>
+      </div>`,
     7: `
       <div class="content-grid">
         <section class="card card-pad"><div class="section-title"><div><h2>先做三个重点静帧</h2><p>优先解决男女主正脸、时代造型和牵手动作</p></div><button class="button secondary small-button" data-route="looks">完整造型库</button></div><div class="feature-grid">${["古代婚服","民国造型","今生婚服"].map((title,index)=>`<article class="feature-card"><div class="feature-icon">${index+1}</div><h4>${title}</h4><p>先用真实照片生成身份卡，再选服装。</p><button class="button secondary small-button" data-route="looks" style="margin-top:12px;">选择造型</button></article>`).join("")}</div></section>
@@ -2502,6 +2511,41 @@ function characterSheetTemplateBlock(targetSelector = "") {
           }
           <button class="button ghost small-button" data-action="copy-character-sheet-template">复制模板</button>
         </div>
+      </div>
+    </details>
+  `;
+}
+
+function sceneBoardTemplateBlock(targetSelector = "") {
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  const saved = project?.customPromptTemplates?.sceneBoard;
+  const description =
+    saved?.description || DEFAULT_SCENE_BOARD_DESCRIPTION;
+  const prompt = buildSceneBoardPrompt({ sceneDescription: description });
+  return `
+    <details class="character-sheet-template scene-board-template" data-scene-board-template>
+      <summary>
+        <span>场景图提示词模板</span>
+        <small>多视角场景板</small>
+      </summary>
+      <div class="character-sheet-template-body">
+        <div class="field">
+          <label>场景描述</label>
+          <textarea class="textarea" data-scene-board-description style="min-height:110px;">${esc(description)}</textarea>
+          <span class="field-hint">修改建筑结构、家具陈设、材质、光线和时代背景，不改变模板的分区规则。</span>
+        </div>
+        <textarea class="textarea" data-scene-board-preview readonly style="min-height:260px;">${esc(prompt)}</textarea>
+        <div class="model-config-actions">
+          <button class="button secondary small-button" data-action="update-scene-board-template">刷新预览</button>
+          <button class="button ghost small-button" data-action="save-scene-board-template">保存为当前项目模板</button>
+          ${
+            targetSelector
+              ? `<button class="button primary small-button" data-action="apply-scene-board-template" data-target-selector="${esc(targetSelector)}">套用到图片提示词</button>`
+              : ""
+          }
+          <button class="button ghost small-button" data-action="copy-scene-board-template">复制模板</button>
+        </div>
+        ${saved?.updatedAt ? `<small class="field-hint">当前项目模板保存于 ${esc(new Date(saved.updatedAt).toLocaleString("zh-CN"))}</small>` : ""}
       </div>
     </details>
   `;
@@ -3007,6 +3051,10 @@ function scenesPage() {
     <div class="page">
       ${pageHeader("scenes")}
       ${progressStrip(2)}
+      <section class="card card-pad" style="margin-bottom:18px;">
+        <div class="section-title"><div><h2>场景图提示词模板</h2><p>保存空间结构、光影、材质和配色后，再开始场景生成</p></div><span class="badge gold">项目模板</span></div>
+        ${sceneBoardTemplateBlock()}
+      </section>
       <section class="card card-pad">
         <div class="section-title">
           <div><h2>三套场景，一条视觉逻辑</h2><p>每个时代只承担一个叙事任务，不堆砌无关元素</p></div>
@@ -3108,6 +3156,7 @@ function promptsPage() {
       <section class="card card-pad" style="margin-bottom:18px;">
         <div class="section-title"><div><h2>图片提示词模板库</h2><p>可复制、可套用到第 7、8 步和图片生成中心</p></div><span class="badge gold">角色设定模板</span></div>
         ${characterSheetTemplateBlock()}
+        ${sceneBoardTemplateBlock()}
       </section>
       <div class="prompt-grid">
         <section class="prompt-card card">
@@ -3205,6 +3254,7 @@ function generatePage() {
           <div class="section-title"><div><h2>生成图片</h2><p>人物定妆、服装、场景或首帧</p></div><span class="badge gold">${esc(imageModel?.model || "未配置")}</span></div>
           <div class="field"><label>图片提示词</label><textarea class="textarea" data-image-prompt style="min-height:125px;">电影级婚礼人物定妆图，成年东方男女，朱红中式婚服与凤冠霞帔，真实皮肤与织物纹理，干净中性背景，全身正面，不出现文字和水印。</textarea></div>
           ${characterSheetTemplateBlock("[data-image-prompt]")}
+          ${sceneBoardTemplateBlock("[data-image-prompt]")}
           <button class="button primary" style="width:100%;margin-top:12px;" data-action="generate-image-direct">${icon("sparkle")}使用 ${esc(imageModel?.label || "默认图片模型")} 生成</button>
         </section>
         <section class="card card-pad">
@@ -3973,7 +4023,7 @@ async function handleAction(button) {
   if (action === "approve-workflow-step") {
     const workflow = state.workflow || { currentStep: 1, approvals: {} };
     const mode = button.dataset.approvalMode || activeRouteInfo.mode || state.mode || "story";
-    const maxStep = mode === "remix" ? 4 : 14;
+    const maxStep = mode === "remix" ? 5 : 14;
     const step = Math.min(
       maxStep,
       Math.max(
@@ -4442,6 +4492,66 @@ async function handleAction(button) {
     await copyText(
       buildCharacterSheetPrompt({ characterDescription: description })
     );
+  }
+  if (action === "update-scene-board-template") {
+    const container = button.closest("[data-scene-board-template]");
+    const description =
+      container?.querySelector("[data-scene-board-description]")?.value ||
+      DEFAULT_SCENE_BOARD_DESCRIPTION;
+    const preview = container?.querySelector("[data-scene-board-preview]");
+    if (preview) {
+      preview.value = buildSceneBoardPrompt({
+        sceneDescription: description
+      });
+    }
+    showToast("场景板模板已刷新");
+  }
+  if (action === "apply-scene-board-template") {
+    const container = button.closest("[data-scene-board-template]");
+    const description =
+      container?.querySelector("[data-scene-board-description]")?.value ||
+      DEFAULT_SCENE_BOARD_DESCRIPTION;
+    const prompt = buildSceneBoardPrompt({ sceneDescription: description });
+    const target = button.dataset.targetSelector
+      ? document.querySelector(button.dataset.targetSelector)
+      : null;
+    if (!target) {
+      showToast("当前页面没有可套用的图片提示词输入框");
+      return;
+    }
+    target.value = prompt;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    const preview = container?.querySelector("[data-scene-board-preview]");
+    if (preview) preview.value = prompt;
+    target.focus();
+    showToast("场景板模板已套用到图片提示词，可继续修改");
+  }
+  if (action === "copy-scene-board-template") {
+    const container = button.closest("[data-scene-board-template]");
+    const description =
+      container?.querySelector("[data-scene-board-description]")?.value ||
+      DEFAULT_SCENE_BOARD_DESCRIPTION;
+    await copyText(buildSceneBoardPrompt({ sceneDescription: description }));
+  }
+  if (action === "save-scene-board-template") {
+    const container = button.closest("[data-scene-board-template]");
+    const description =
+      container?.querySelector("[data-scene-board-description]")?.value.trim() ||
+      DEFAULT_SCENE_BOARD_DESCRIPTION;
+    const prompt = buildSceneBoardPrompt({ sceneDescription: description });
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    await api.updateProject(currentProjectId, {
+      customPromptTemplates: {
+        ...(project?.customPromptTemplates || {}),
+        sceneBoard: {
+          description,
+          prompt,
+          updatedAt: new Date().toISOString()
+        }
+      }
+    });
+    await refreshRuntime();
+    showToast("场景板模板已保存到当前项目");
   }
   if (action === "copy-image-prompt") {
     await copyText(document.querySelector("[data-image-prompt]")?.value || "");
