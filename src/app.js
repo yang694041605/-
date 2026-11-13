@@ -365,10 +365,10 @@ const NAV_TREE = [
     symbol: "复",
     route: "remix",
     children: [
-      { id: "remix-step-01", label: "01 下载与全帧提取", route: "remixStep1" },
-      { id: "remix-step-02", label: "02 画面声音字幕分析", route: "remixStep2" },
-      { id: "remix-step-03", label: "03 人物目标与逐镜替换", route: "remixStep3" },
-      { id: "remix-step-04", label: "04 时间轴封装与交付", route: "remixStep4" }
+      { id: "remix-step-01", label: "01 下载与全帧提取", route: "remixStep1", children: buildRemixNavigationChildren(1) },
+      { id: "remix-step-02", label: "02 画面声音字幕分析", route: "remixStep2", children: buildRemixNavigationChildren(2) },
+      { id: "remix-step-03", label: "03 人物目标与逐镜替换", route: "remixStep3", children: buildRemixNavigationChildren(3) },
+      { id: "remix-step-04", label: "04 时间轴封装与交付", route: "remixStep4", children: buildRemixNavigationChildren(4) }
     ]
   },
   {
@@ -549,6 +549,54 @@ const REMIX_STEPS = [
   { number: 3, title: "人物目标与逐镜替换", subtitle: "明确人物后逐镜生成和人工审核", route: "remixStep3" },
   { number: 4, title: "时间轴封装与交付", subtitle: "当前镜头时间线、声音字幕和预览", route: "remixStep4" }
 ];
+
+const REMIX_GUIDES = [
+  {
+    inputs: ["抖音链接或本地参考视频", "模板使用权", "当前项目男女主照片"],
+    actions: ["下载并保存原片", "按 24 FPS 提取全帧", "提取独立原音频和帧索引"],
+    outputs: ["完整帧序列", "frame-index.json", "original-audio.wav"],
+    checks: ["原片可播放", "帧数与 24 FPS 时长一致", "音频文件存在"]
+  },
+  {
+    inputs: ["全帧索引", "原始音频", "切镜结果"],
+    actions: ["逐镜画面理解", "音视频与字幕转写", "人物位置和目标识别", "提示词结构提取"],
+    outputs: ["镜头语义", "字幕与声音时间点", "人物目标候选", "视频提示词结构"],
+    checks: ["覆盖完整时间轴", "不编造看不到的内容", "模型缺口明确记录"]
+  },
+  {
+    inputs: ["男女主角色照片", "明确替换目标", "最多八个连续镜头"],
+    actions: ["指定左侧/右侧/人物编号", "生成每镜提示词", "逐镜生成或上传视频", "八项人工质检"],
+    outputs: ["每镜替换视频", "首帧与提示词版本", "人工审核记录"],
+    checks: ["不是同一人物目标", "身份、手部、动作、背景通过", "每镜绑定最终片段"]
+  },
+  {
+    inputs: ["全部批准镜头", "原声音", "裁剪字幕", "完整时间轴"],
+    actions: ["生成完整预览", "检查原声音与字幕", "整理正式交付包"],
+    outputs: ["预览 MP4", "交付包", "字幕与工程文件"],
+    checks: ["完整观看", "原声音与画面同步", "授权和质检记录完整"]
+  }
+];
+
+function buildRemixNavigationChildren(number) {
+  const guide = REMIX_GUIDES[number - 1];
+  if (!guide) return [];
+  return [
+    ["input", "输入清单", guide.inputs],
+    ["actions", "操作功能", guide.actions],
+    ["outputs", "步骤产物", guide.outputs],
+    ["checks", "人工检查", guide.checks]
+  ].map(([key, label, items]) => ({
+    id: `remix-step-${number}-level4-${key}`,
+    label,
+    symbol: label.slice(0, 1),
+    children: items.map((item, index) => ({
+      id: `remix-step-${number}-level5-${key}-${index + 1}`,
+      label: item,
+      route: `remixStep${number}`,
+      target: `remix-${number}-${key}-${index + 1}`
+    }))
+  }));
+}
 
 const VVV_STYLE_PRESETS = [
   {
@@ -1262,6 +1310,7 @@ function remixStepPage(number) {
         <span class="badge ${approved ? "green" : ready ? "gold" : "gray"}">${approved ? "已确认" : ready ? "可确认" : "等待当前步骤材料"}</span>
         <button class="button ghost small-button" data-route="remix">返回复刻总览</button>
       </section>
+      ${remixWorkflowGuide(number)}
       ${remixStepContent(number)}
       <section class="step-confirm card">
         <div><strong>${ready ? "当前复刻步骤条件已满足" : "当前复刻步骤仍有缺口"}</strong><p>确认只绑定当前项目、当前镜头和当前时间轴版本。</p></div>
@@ -1271,6 +1320,21 @@ function remixStepPage(number) {
         </div>
       </section>
     </div>`;
+}
+
+function remixWorkflowGuide(number) {
+  const guide = REMIX_GUIDES[number - 1];
+  if (!guide) return "";
+  return `
+    <section class="card card-pad step-production-guide">
+      <div class="section-title"><div><h2>本步复刻生产说明</h2><p>每一级菜单都可以展开，第五级条目会跳转到对应输入、功能、产物或审核项。</p></div><span class="badge red">复刻 ${number} / 4</span></div>
+      <div class="step-guide-grid">
+        <div class="step-guide-column"><span class="step-guide-index">输入</span><strong>这一步需要什么</strong>${guide.inputs.map((item, index) => `<p data-step-target="remix-${number}-input-${index + 1}"><span>${icon("check")}</span>${esc(item)}</p>`).join("")}</div>
+        <div class="step-guide-column"><span class="step-guide-index">操作</span><strong>页面上要完成什么</strong>${guide.actions.map((item, index) => `<p data-step-target="remix-${number}-actions-${index + 1}"><b>${index + 1}</b>${esc(item)}</p>`).join("")}</div>
+        <div class="step-guide-column"><span class="step-guide-index">产物</span><strong>完成后会得到什么</strong>${guide.outputs.map((item, index) => `<p data-step-target="remix-${number}-outputs-${index + 1}"><span>${icon("play")}</span>${esc(item)}</p>`).join("")}</div>
+        <div class="step-guide-column"><span class="step-guide-index">审核</span><strong>确认前必须检查</strong>${guide.checks.map((item, index) => `<p data-step-target="remix-${number}-checks-${index + 1}"><span>${icon("shield")}</span>${esc(item)}</p>`).join("")}</div>
+      </div>
+    </section>`;
 }
 
 function remixStepContent(number) {

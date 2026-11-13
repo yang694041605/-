@@ -93,9 +93,27 @@ function normalizeStoryboardShots(project, assetsById) {
 
 function selectedAudioTrack(project, assets, kind, explicitId) {
   const candidates = assets.filter((asset) => asset.kind === kind);
+  const fullMixId = project.timelineSelection?.fullMixAssetId;
+  if (fullMixId && kind === "music") return [];
+  if (fullMixId && kind === "voice") {
+    const fullMix = assets.find(
+      (asset) => asset.id === fullMixId && asset.kind === "mix"
+    );
+    if (fullMix) {
+      return [
+        {
+          assetId: fullMix.id,
+          hash: fullMix.contentHash || fullMix.sha256 || "",
+          start: 0,
+          end: Number(project.duration || 0),
+          sourceStart: 0
+        }
+      ];
+    }
+  }
   if (project.mode === "remix" && !explicitId) return [];
   const selected =
-    candidates.find((asset) => asset.id === explicitId) ||
+    assets.find((asset) => asset.id === explicitId) ||
     candidates
       .slice()
       .sort(
@@ -144,13 +162,83 @@ export function buildProjectTimeline(project, assets = [], revision = 1) {
 }
 
 export function approvalSnapshot(project, assets, { mode, step }) {
-  const timeline = buildProjectTimeline(project, assets);
+  const numericStep = Number(step);
+  const timelineProject =
+    numericStep < 12
+      ? {
+          ...project,
+          timelineSelection: {
+            ...(project.timelineSelection || {}),
+            fullMixAssetId: ""
+          }
+        }
+      : project;
+  const timeline = buildProjectTimeline(timelineProject, assets);
+  const scopedTracks = {
+    video:
+      numericStep >= 6
+        ? timeline.tracks.video.map((track) =>
+            numericStep >= 9
+              ? track
+              : {
+                  id: track.id,
+                  shotId: track.shotId || track.id,
+                  order: track.order,
+                  startFrame: track.startFrame,
+                  endFrame: track.endFrame,
+                  duration: track.duration
+                }
+          )
+        : [],
+    voice: [4, 5, 12, 13, 14].includes(numericStep)
+      ? timeline.tracks.voice
+      : [],
+    music: [10, 13, 14].includes(numericStep)
+      ? timeline.tracks.music
+      : [],
+    subtitle: numericStep >= 13 ? timeline.tracks.subtitle : []
+  };
+  const scopedTimelineHash = sha256Text(
+    stableStringify({
+      schema: timeline.schema,
+      mode: timeline.mode,
+      fps: timeline.fps,
+      duration: timeline.duration,
+      totalFrames: timeline.totalFrames,
+      tracks: scopedTracks
+    })
+  );
   const usedAssetIds = new Set([
-    ...timeline.tracks.video.map((item) => item.assetId),
-    ...timeline.tracks.voice.map((item) => item.assetId),
-    ...timeline.tracks.music.map((item) => item.assetId),
-    ...timeline.tracks.subtitle.map((item) => item.assetId)
+    ...scopedTracks.video.map((item) => item.assetId),
+    ...scopedTracks.voice.map((item) => item.assetId),
+    ...scopedTracks.music.map((item) => item.assetId),
+    ...scopedTracks.subtitle.map((item) => item.assetId)
   ]);
+  if (numericStep >= 7) {
+    for (const shot of project.storyboard || []) {
+      if (shot.assets?.firstFrame?.assetId) {
+        usedAssetIds.add(shot.assets.firstFrame.assetId);
+      }
+      if (numericStep >= 9 && shot.assets?.video?.assetId) {
+        usedAssetIds.add(shot.assets.video.assetId);
+      }
+      if (numericStep >= 9 && shot.assets?.finalClip?.assetId) {
+        usedAssetIds.add(shot.assets.finalClip.assetId);
+      }
+    }
+  }
+  if (numericStep >= 11 && project.mixSampleAssetId && numericStep === 11) {
+    usedAssetIds.add(project.mixSampleAssetId);
+  }
+  if (numericStep >= 12 && project.mixAssetId) {
+    usedAssetIds.add(project.mixAssetId);
+  }
+  if (numericStep >= 13 && project.previewAssetId) {
+    usedAssetIds.add(project.previewAssetId);
+  }
+  if (numericStep >= 14 && project.deliveryPackageAssetId) {
+    usedAssetIds.add(project.deliveryPackageAssetId);
+  }
   const assetHashes = Object.fromEntries(
     assets
       .filter((asset) => usedAssetIds.has(asset.id))
@@ -162,8 +250,31 @@ export function approvalSnapshot(project, assets, { mode, step }) {
       `${Number(shot.promptVersion?.version || 1)}:${shot.promptVersion?.hash || sha256Text(String(shot.prompt || ""))}`
     ])
   );
-  const contentHash = sha256Text(
-    stableStringify({
+  const storyboardContent = (project.storyboard || []).map((shot) => ({
+    id: shot.id,
+    start: shot.start,
+    end: shot.end,
+    frames: shot.frames,
+    title: shot.title,
+    scene: shot.scene,
+    shot: shot.shot,
+    move: shot.move,
+    act: shot.act,
+    prompt: shot.prompt || "",
+    source: shot.source || null,
+    characters: shot.characters || null,
+    status: numericStep >= 9 ? shot.status || "" : undefined,
+    review: numericStep >= 9 ? shot.review || {} : undefined,
+    imagePrompt: numericStep >= 7 ? shot.imagePrompt || "" : undefined,
+    imagePromptVersion:
+      numericStep >= 7 ? shot.imagePromptVersion || null : undefined,
+    imageStatus: numericStep >= 7 ? shot.imageStatus || "" : undefined,
+    imageReview: numericStep >= 7 ? shot.imageReview || {} : undefined,
+    videoPrompt: numericStep >= 9 ? shot.videoPrompt || "" : undefined,
+    videoPromptVersion:
+      numericStep >= 9 ? shot.videoPromptVersion || null : undefined
+  }));
+  const scopedContent = {
       groom: project.groom || "",
       bride: project.bride || "",
       weddingDate: project.weddingDate || project.date || "",
@@ -175,27 +286,27 @@ export function approvalSnapshot(project, assets, { mode, step }) {
       tone: project.tone || "",
       aspect: project.aspect || "",
       templateId: project.templateId || "",
+      photoAssetIds: project.photoAssetIds || {},
+      musicLicense: numericStep >= 10 ? project.musicLicense || "" : undefined,
+      subtitleStyle: numericStep >= 13 ? project.subtitleStyle || null : undefined,
+      mixSampleAssetId:
+        numericStep >= 11 ? project.mixSampleAssetId || "" : undefined,
+      mixAssetId: numericStep >= 12 ? project.mixAssetId || "" : undefined,
+      deliveryPackageAssetId:
+        numericStep >= 14 ? project.deliveryPackageAssetId || "" : undefined,
+      previewAssetId:
+        numericStep >= 13 ? project.previewAssetId || "" : undefined,
       treatment: project.treatment || null,
       remixTargets: project.remixTargets || null,
       remixRange: project.remixRange || null,
-      storyboard: (project.storyboard || []).map((shot) => ({
-        id: shot.id,
-        start: shot.start,
-        end: shot.end,
-        frames: shot.frames,
-        prompt: shot.prompt || "",
-        source: shot.source || null,
-        characters: shot.characters || null,
-        status: shot.status || "",
-        review: shot.review || {}
-      }))
-    })
-  );
+      storyboard: numericStep >= 6 ? storyboardContent : []
+  };
+  const contentHash = sha256Text(stableStringify(scopedContent));
   const payload = {
     projectId: project.id,
     mode: mode === "remix" ? "remix" : "story",
     step: Number(step),
-    timelineHash: timeline.hash,
+    timelineHash: scopedTimelineHash,
     contentHash,
     assetHashes,
     promptVersions
@@ -309,6 +420,19 @@ export function validateRenderTimeline(project, timeline, assets) {
 export function storyWorkflowReady(project, assets, step, workflow = project.workflow) {
   const shots = Array.isArray(project.storyboard) ? project.storyboard : [];
   const hasKind = (kind) => assets.some((asset) => asset.kind === kind);
+  const imageApproved = (shot) =>
+    shot.imageStatus === "approved" &&
+    Boolean(shot.assets?.firstFrame?.assetId) &&
+    ["identity", "sameCouple", "hands", "costume", "composition"].every(
+      (key) => shot.imageReview?.[key] === "passed"
+    );
+  const keyShotIds = shots.length
+    ? [
+        shots[0]?.id,
+        shots[Math.floor((shots.length - 1) / 2)]?.id,
+        shots.at(-1)?.id
+      ].filter(Boolean)
+    : [];
   if (step === 1) {
     return Boolean(
       String(project.groom || "").trim() &&
@@ -320,10 +444,15 @@ export function storyWorkflowReady(project, assets, step, workflow = project.wor
   if (step === 3) return Boolean(workflow?.approvals?.[2]);
   if (step === 4 || step === 5) return hasKind("voice");
   if (step === 6) return shots.length > 0;
-  if (step === 7) return assets.some((asset) => asset.kind === "image" || asset.kind === "look-image");
-  if (step === 8) {
-    return assets.filter((asset) => asset.kind === "image" || asset.kind === "look-image").length >= 3;
+  if (step === 7) {
+    return (
+      keyShotIds.length > 0 &&
+      shots
+        .filter((shot) => keyShotIds.includes(shot.id))
+        .every(imageApproved)
+    );
   }
+  if (step === 8) return shots.length > 0 && shots.every(imageApproved);
   if (step === 9) {
     return (
       shots.length > 0 &&
@@ -336,17 +465,33 @@ export function storyWorkflowReady(project, assets, step, workflow = project.wor
       )
     );
   }
-  if (step === 10) return hasKind("music");
-  if (step === 11 || step === 12) return hasKind("voice") && hasKind("music");
+  if (step === 10) {
+    return hasKind("music") && Boolean(String(project.musicLicense || "").trim());
+  }
+  if (step === 11) {
+    return assets.some((asset) => asset.id === project.mixSampleAssetId);
+  }
+  if (step === 12) {
+    return assets.some(
+      (asset) => asset.id === project.mixAssetId && asset.kind === "mix"
+    );
+  }
   if (step === 13) {
     const approvedAt = workflow?.approvals?.[12]?.approvedAt || "";
     return assets.some(
       (asset) =>
-        asset.kind === "export" &&
+        asset.id === project.previewAssetId &&
+        asset.kind === "preview" &&
         (!approvedAt || String(asset.createdAt || "") >= approvedAt)
     );
   }
-  if (step === 14) return Boolean(workflow?.approvals?.[13]);
+  if (step === 14) {
+    return assets.some(
+      (asset) =>
+        asset.id === project.deliveryPackageAssetId &&
+        asset.kind === "delivery-package"
+    );
+  }
   return false;
 }
 
