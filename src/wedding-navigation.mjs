@@ -286,14 +286,18 @@ function remixRoot() {
     route: "remix",
     children: remixSteps.map(([label, route, inputs, actions], stepIndex) =>
       sectionNode(`remix-level2-${stepIndex + 1}`, label, [
-        groupNode(`remix-level3-${stepIndex + 1}-input`, "输入清单", inputs.map((item, index) => ({
-          label: item,
-          tasks: [`查看${item}`, index === 0 ? "去准备输入" : "检查是否就绪"]
-        })), route),
-        groupNode(`remix-level3-${stepIndex + 1}-action`, "操作功能", actions.map((item) => ({
-          label: item,
-          tasks: [`执行${item}`, "查看执行结果"]
-        })), route)
+        {
+          id: `remix-level3-${stepIndex + 1}-input`,
+          label: "输入清单",
+          symbol: "输",
+          route
+        },
+        {
+          id: `remix-level3-${stepIndex + 1}-action`,
+          label: "操作功能",
+          symbol: "操",
+          route
+        }
       ])
     )
   };

@@ -587,20 +587,15 @@ function buildRemixNavigationChildren(number) {
   const guide = REMIX_GUIDES[number - 1];
   if (!guide) return [];
   return [
-    ["input", "输入清单", guide.inputs],
-    ["actions", "操作功能", guide.actions],
-    ["outputs", "步骤产物", guide.outputs],
-    ["checks", "人工检查", guide.checks]
-  ].map(([key, label, items]) => ({
+    ["input", "输入清单"],
+    ["actions", "操作功能"],
+    ["outputs", "步骤产物"],
+    ["checks", "人工检查"]
+  ].map(([key, label]) => ({
     id: `remix-step-${number}-level4-${key}`,
     label,
     symbol: label.slice(0, 1),
-    children: items.map((item, index) => ({
-      id: `remix-step-${number}-level5-${key}-${index + 1}`,
-      label: item,
-      route: `remixStep${number}`,
-      target: `remix-${number}-${key}-${index + 1}`
-    }))
+    route: `remixStep${number}`
   }));
 }
 

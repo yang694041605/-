@@ -52,14 +52,39 @@ test("三级、四级和五级节点都能解析到实际页面与定位目标",
   }
 });
 
-test("点击分组节点会展开祖先菜单并带上可用的定位锚点", () => {
+test("点击步骤分组会展开祖先菜单并直接打开完整步骤页面", () => {
   const tree = buildWeddingNavigationTree();
   const action = resolveWeddingNavigationAction(
     "step-7-level4-input",
     tree
   );
   assert.equal(action.route, "step7");
-  assert.equal(action.target, "step-7-input-1");
+  assert.equal(action.target, "");
+  assert.equal(action.node.children?.length || 0, 0);
   assert.ok(action.expandIds.includes("guide-14-steps"));
   assert.ok(action.expandIds.includes("step-7-level4-input"));
+});
+
+test("14 步和抖音复刻步骤不再生成重复的五级、六级子导航", () => {
+  const flat = flattenWeddingNavigation();
+  assert.equal(
+    flat.filter((item) => /^step-\d+-level[56]-/.test(item.node.id)).length,
+    0
+  );
+  assert.equal(
+    flat.filter((item) => /^remix-level[45]-/.test(item.node.id)).length,
+    0
+  );
+  const workflowGroups = flat.filter((item) =>
+    /^step-\d+-level4-(input|actions|outputs|checks)$/.test(item.node.id)
+  );
+  assert.equal(workflowGroups.length, 56);
+  assert.ok(
+    workflowGroups.every(
+      (item) =>
+        item.node.route?.startsWith("step") &&
+        !item.node.children?.length &&
+        !item.node.target
+    )
+  );
 });

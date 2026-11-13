@@ -214,28 +214,15 @@ export function buildStepNavigationChildren(stepNumber) {
   const step = getWorkflowStep(stepNumber);
   if (!step) return [];
   const groups = [
-    ["input", "输入清单", step.requiredInputs],
-    ["actions", "操作功能", step.actions],
-    ["outputs", "步骤产物", step.outputs],
-    ["checks", "人工检查", step.checks]
+    ["input", "输入清单"],
+    ["actions", "操作功能"],
+    ["outputs", "步骤产物"],
+    ["checks", "人工检查"]
   ];
-  return groups.map(([key, label, items]) => ({
+  return groups.map(([key, label]) => ({
     id: `step-${step.number}-level4-${key}`,
     label,
     symbol: label.slice(0, 1),
-    children: items.map((item, index) => ({
-      id: `step-${step.number}-level5-${key}-${index + 1}`,
-      label: item,
-      route: step.route,
-      target: `step-${step.number}-${key}-${index + 1}`,
-      children: [
-        {
-          id: `step-${step.number}-level6-${key}-${index + 1}`,
-          label: `打开：${item}`,
-          route: step.route,
-          target: `step-${step.number}-${key}-${index + 1}`
-        }
-      ]
-    }))
+    route: step.route
   }));
 }
