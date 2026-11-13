@@ -390,6 +390,12 @@ test("抖音复刻显示五个直接步骤并打开对应页面", { timeout: 600
           `Boolean(document.querySelector('[data-video-storyboard-template]'))`
         );
       }
+      if (hash.endsWith("/step/1")) {
+        await waitForBrowser(
+          page.evaluate,
+          `['参考视频库','人物素材库','音频素材库','分镜提示词库'].every((label) => document.body.innerText.includes(label))`
+        );
+      }
     }
     assert.deepEqual(page.exceptions, []);
     page.close();

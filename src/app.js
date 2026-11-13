@@ -43,6 +43,10 @@ import {
   buildStoredRemixReport
 } from "./remix-report.mjs";
 import { REMIX_PAGE_SPECS } from "./remix-page-specs.mjs";
+import {
+  buildRemixShotPromptLibrary,
+  remixPromptLibraryStats
+} from "./remix-reference-library.mjs";
 
 const STORAGE_KEY = "xying-wedding-film-studio-v1";
 
@@ -648,6 +652,7 @@ let runtime = {
   jobs: [],
   timeline: null,
   remixReport: null,
+  remixPromptLibrary: [],
   approvalSnapshots: {},
   modelSchema: {
     categories: [],
@@ -813,6 +818,12 @@ async function refreshRuntime({ rerender = true } = {}) {
       }
       const template = runtime.templates.find((item) => item.id === project.templateId);
       storyboard = bindStoryboardToTemplate(storyboard, template);
+      const storedReferenceLibrary = project.remixReferenceLibrary;
+      runtime.remixPromptLibrary =
+        storedReferenceLibrary?.templateId === template?.id &&
+        storedReferenceLibrary?.shotPrompts?.length
+          ? storedReferenceLibrary.shotPrompts
+          : buildRemixShotPromptLibrary(template || {}, project || state);
       const timelinePayload = await api
         .getProjectTimeline(project.id, effectiveMode)
         .catch(() => null);
@@ -1772,6 +1783,77 @@ function renderBatchImageWorkbench({
   </section>`;
 }
 
+function renderRemixCharacterLibrary(items) {
+  if (!items.length) {
+    return '<div class="empty-state" style="min-height:150px;"><div><div class="empty-state-symbol">人</div><h3>人物素材库为空</h3><p>导入参考片后，可在这里上传或提取主要人物参考。</p></div></div>';
+  }
+  return `<div class="asset-grid remix-character-library">${items
+    .map(
+      (asset, index) => `<article class="asset-card card" data-media-asset-id="${asset.id}" data-media-title="${esc(asset.title)}">
+        <div class="asset-preview"><img src="${esc(api.mediaUrl(asset.url))}" alt="${esc(asset.title)}" /></div>
+        <div class="asset-info">
+          <strong>${esc(asset.title)}</strong>
+          <small>人物参考 ${String(index + 1).padStart(2, "0")} · ${esc(asset.kind)}</small>
+          <small class="badge gold">仅作造型参考</small>
+        </div>
+      </article>`
+    )
+    .join("")}</div>`;
+}
+
+function renderRemixAudioLibrary(items, transcript = []) {
+  if (!items.length) {
+    return '<p class="small muted">音频库为空，完成原音频提取后会显示在这里。</p>';
+  }
+  return `<div class="stack" style="gap:10px;">${items
+    .map(
+      (asset) => `<div class="prompt-block">
+        <div class="section-title"><div><strong>${esc(asset.title)}</strong><small>${Number(asset.media?.duration || 0).toFixed(1)} 秒 · 参考片原音频</small></div><a class="button ghost small-button" href="${esc(api.mediaUrl(asset.url))}" download>下载 WAV</a></div>
+        <audio controls preload="metadata" src="${esc(api.mediaUrl(asset.url))}" style="width:100%;"></audio>
+      </div>`
+    )
+    .join("")}</div>${
+    transcript.length
+      ? `<div class="notice" style="margin-top:14px;">${icon("shield")}<div><strong>自动转写可靠性提示</strong>当前音频以音乐和现场声为主，Whisper 仅返回 ${transcript.length} 个重复片段，未自动写入正式字幕；请以原音频和人工听审为准。</div></div>`
+      : ""
+  }`;
+}
+
+function renderRemixPromptLibrary(items, template) {
+  if (!items.length) {
+    return `<section class="card card-pad remix-prompt-library">
+      <div class="section-title"><div><h2>分镜提示词库</h2><p>完成 24 FPS 提取和镜头切点后自动生成</p></div><span class="badge gray">0 镜</span></div>
+      <div class="empty-state" style="min-height:160px;"><div><div class="empty-state-symbol">词</div><h3>尚无分镜提示词</h3><p>导入参考片并完成镜头切点后会显示图片、视频和人物替换提示词。</p></div></div>
+    </section>`;
+  }
+  const stats = remixPromptLibraryStats(items);
+  const first = items[0];
+  return `<section class="card card-pad remix-prompt-library">
+    <div class="section-title">
+      <div><h2>分镜提示词库</h2><p>${stats.shots} 镜 · ${stats.frames} 帧 · ${stats.imagePrompts + stats.videoPrompts + stats.replacementPrompts} 条可复制提示词</p></div>
+      <button class="button secondary small-button" data-action="save-remix-reference-library" data-template-id="${template?.id || ""}">保存到当前项目</button>
+    </div>
+    <div class="remix-prompt-selector">
+      <div class="field"><label>选择分镜</label><select class="select" data-remix-prompt-shot>${items.map((item) => `<option value="${item.shotId}">${String(item.order).padStart(3, "0")} · ${item.start.toFixed(2)}–${item.end.toFixed(2)} 秒 · ${item.frames} 帧</option>`).join("")}</select></div>
+      <div class="reference-prompt-keyframes">
+        <img data-reference-keyframe="first" src="${esc(api.mediaUrl(first.keyFrames.first))}" alt="首帧" />
+        <img data-reference-keyframe="middle" src="${esc(api.mediaUrl(first.keyFrames.middle))}" alt="中间帧" />
+        <img data-reference-keyframe="last" src="${esc(api.mediaUrl(first.keyFrames.last))}" alt="尾帧" />
+      </div>
+    </div>
+    <div class="stack" style="gap:12px;">
+      <div class="prompt-block"><div class="section-title"><div><strong>图片提示词</strong><small>静态首帧与人物身份，可编辑</small></div><button class="button ghost small-button" data-action="copy-reference-shot-prompt" data-prompt-kind="image">复制</button></div><textarea class="textarea" data-reference-prompt="image" style="min-height:150px;">${esc(first.imagePrompt)}</textarea></div>
+      <div class="prompt-block"><div class="section-title"><div><strong>视频提示词</strong><small>动作、运镜、连续性，可编辑</small></div><button class="button ghost small-button" data-action="copy-reference-shot-prompt" data-prompt-kind="video">复制</button></div><textarea class="textarea" data-reference-prompt="video" style="min-height:150px;">${esc(first.videoPrompt)}</textarea></div>
+      <div class="prompt-block"><div class="section-title"><div><strong>人物替换提示词</strong><small>图一、图二与质量门槛，可编辑</small></div><button class="button ghost small-button" data-action="copy-reference-shot-prompt" data-prompt-kind="replacement">复制</button></div><textarea class="textarea" data-reference-prompt="replacement" style="min-height:110px;">${esc(first.replacementPrompt)}</textarea></div>
+    </div>
+    <div class="remix-base-template-links">
+      <button class="button ghost small-button" data-route="prompts">角色三视图模板</button>
+      <button class="button ghost small-button" data-route="prompts">场景图模板</button>
+      <button class="button ghost small-button" data-route="prompts">分单元视频脚本</button>
+    </div>
+  </section>`;
+}
+
 function remixStepContent(number) {
   const template = currentRemixTemplate();
   const project = runtime.projects.find((item) => item.id === currentProjectId);
@@ -1791,15 +1873,51 @@ function remixStepContent(number) {
       (asset.projectId || asset.ownerId) === currentProjectId &&
       ["batch-image", "image", "look-image"].includes(asset.kind)
   );
+  const referenceCharacterAssets = runtime.assets.filter(
+    (asset) =>
+      (asset.projectId || asset.ownerId) === currentProjectId &&
+      asset.kind === "character-reference" &&
+      asset.url
+  );
+  const referenceAudioAssets = runtime.assets.filter(
+    (asset) =>
+      (asset.projectId || asset.ownerId) === currentProjectId &&
+      asset.kind === "template-audio" &&
+      asset.url
+  );
+  const promptLibrary = runtime.remixPromptLibrary.length
+    ? runtime.remixPromptLibrary
+    : buildRemixShotPromptLibrary(template || {}, project || state);
 
   if (number === 1) {
-    return `<div class="content-grid remix-workflow-grid">
+    return `<div class="stack remix-reference-step">
+      <section class="card card-pad remix-source-library">
+        <div class="section-title"><div><h2>参考视频库</h2><p>原片仅作为授权结构参考，不对客户直接交付</p></div><span class="badge ${template ? "green" : "gray"}">${template ? "原片已归档" : "尚未导入"}</span></div>
+        ${
+          template
+            ? `<div class="remix-source-grid">
+                <div class="remix-source-video"><video controls preload="metadata" poster="${esc(api.mediaUrl(template.coverUrl))}"><source src="${esc(api.mediaUrl(template.videoUrl))}" type="video/mp4" /></video></div>
+                <div class="remix-source-info">
+                  <small>DOUYIN REFERENCE · 24 FPS ANALYSIS</small>
+                  <h3>${esc(template.title)}</h3>
+                  <p>${esc(template.author || "作者信息未识别")}</p>
+                  <div class="summary-meta">
+                    <div class="summary-meta-item"><span>原片时长</span><strong>${Number(template.duration || 0).toFixed(2)} 秒</strong></div>
+                    <div class="summary-meta-item"><span>画幅</span><strong>${esc(template.aspect || "16:9")}</strong></div>
+                    <div class="summary-meta-item"><span>24 FPS 帧数</span><strong>${extraction?.totalFrames || 0} 帧</strong></div>
+                  </div>
+                  <div class="remix-source-actions"><a class="button ghost small-button" href="${esc(api.mediaUrl(template.videoUrl))}" download>保存原片</a><a class="button ghost small-button" href="${esc(api.mediaUrl(template.coverUrl))}" download>保存封面</a></div>
+                </div>
+              </div>`
+            : '<div class="empty-state" style="min-height:170px;"><div><div class="empty-state-symbol">片</div><h3>尚未导入抖音参考片</h3><p>粘贴链接后会自动下载、提取封面并建立媒体信息。</p></div></div>'
+        }
+      </section>
+      <div class="content-grid remix-workflow-grid">
       <section class="card card-pad">
         <div class="section-title"><div><h2>抖音链接下载</h2><p>下载前确认参考片使用和改编权限</p></div><span class="badge ${template ? "green" : "gold"}">${template ? "已导入" : "等待链接"}</span></div>
         <div class="field"><label for="remix-template-url">抖音短链接</label><input id="remix-template-url" class="input" data-template-url placeholder="https://v.douyin.com/..." /></div>
         <label class="check-item remix-rights-check"><input type="checkbox" data-remix-rights /><div class="check-copy"><strong>已取得参考片使用权</strong><small>下载内容只作为结构参考，不把原片直接交付给客户。</small></div></label>
         <button class="button primary" style="width:100%;margin-top:12px;" data-action="import-template-url">${icon("sparkle")}下载并建立模板</button>
-        ${template ? `<div class="summary-meta" style="margin-top:16px;"><div class="summary-meta-item"><span>模板</span><strong>${esc(template.title)}</strong></div><div class="summary-meta-item"><span>画幅</span><strong>${esc(template.aspect || "未知")}</strong></div><div class="summary-meta-item"><span>时长</span><strong>${Number(template.duration || 0).toFixed(2)} 秒</strong></div></div>` : ""}
       </section>
       <section class="card card-pad">
         <div class="section-title"><div><h3>24 FPS 全帧与音频</h3><p>原片、帧索引和独立音频必须一起保留</p></div><span class="badge ${extraction ? "green" : "gray"}">${extraction ? "已提取" : "待提取"}</span></div>
@@ -1810,6 +1928,20 @@ function remixStepContent(number) {
           <div class="check-item"><span class="check-icon">✓</span><div class="check-copy"><strong>帧索引</strong><small>${extraction.indexUrl ? `<a href="${esc(api.mediaUrl(extraction.indexUrl))}" target="_blank" rel="noreferrer">打开 JSON</a>` : "缺失"}</small></div></div>
         </div>` : ""}
       </section>
+      </div>
+      <section class="card card-pad">
+        <div class="section-title"><div><h2>人物素材库</h2><p>从参考片提取的主要人物形象，仅用于服装、妆造、构图和身份一致性参考</p></div><span class="badge gold">${referenceCharacterAssets.length} 份</span></div>
+        ${renderRemixCharacterLibrary(referenceCharacterAssets)}
+        <div class="notice red" style="margin-top:14px;">${icon("shield")}<div><strong>参考人物不等于客户身份</strong>正式生成前必须上传当前新郎新娘本人照片，并取得人物替换授权。</div></div>
+      </section>
+      <section class="card card-pad">
+        <div class="section-title"><div><h2>音频素材库</h2><p>参考片原始音频、WAV 下载和时间基准</p></div><span class="badge gold">${referenceAudioAssets.length} 条</span></div>
+        ${renderRemixAudioLibrary(
+          referenceAudioAssets,
+          analysis?.audio?.transcript || []
+        )}
+      </section>
+      ${renderRemixPromptLibrary(promptLibrary, template)}
     </div>`;
   }
 
@@ -2190,7 +2322,7 @@ function shotImageWorkbench(stepNumber, candidateShots, selected) {
     ]
   ];
   const imageAssets = runtime.assets.filter((asset) =>
-    ["batch-image", "image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
+    ["batch-image", "character-reference", "image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
   );
   const imageReview = shot.imageReview || {};
   const prompt =
@@ -2238,7 +2370,7 @@ function workflowStepContent(number) {
   const voiceAssets = runtime.assets.filter((asset) => asset.kind === "voice" && asset.url);
   const musicAssets = runtime.assets.filter((asset) => asset.kind === "music" && asset.url);
   const imageAssets = runtime.assets.filter((asset) =>
-    ["batch-image", "image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
+    ["batch-image", "character-reference", "image", "look-image", "project-photo", "outfit-reference", "scene-reference"].includes(asset.kind)
   );
   const videoAssets = runtime.assets.filter((asset) => asset.kind === "video" && asset.url);
   const exports = runtime.assets.filter((asset) => asset.kind === "export" && asset.url);
@@ -3604,7 +3736,7 @@ function assetsPage() {
                         ${
                           asset.previewUrl
                             ? `<img src="${esc(api.mediaUrl(asset.previewUrl))}" alt="${esc(asset.title)}" />`
-                            : ["image", "look-image", "photo", "project-photo", "story-card", "outfit-reference", "scene-reference"].includes(asset.kind) && asset.url
+                            : ["image", "look-image", "character-reference", "photo", "project-photo", "story-card", "outfit-reference", "scene-reference"].includes(asset.kind) && asset.url
                               ? `<img src="${esc(api.mediaUrl(asset.url))}" alt="${esc(asset.title)}" />`
                             : asset.kind === "video" && asset.url
                               ? `<video src="${esc(api.mediaUrl(asset.url))}" muted preload="metadata"></video>`
@@ -3859,6 +3991,25 @@ function bindCurrentView() {
   });
   backgroundPolicy?.addEventListener("change", syncPrompt);
 
+  const referencePromptSelect = document.querySelector("[data-remix-prompt-shot]");
+  referencePromptSelect?.addEventListener("change", () => {
+    const item = runtime.remixPromptLibrary.find(
+      (entry) => entry.shotId === referencePromptSelect.value
+    );
+    if (!item) return;
+    const setPrompt = (kind, value) => {
+      const textarea = document.querySelector(`[data-reference-prompt="${kind}"]`);
+      if (textarea) textarea.value = value || "";
+    };
+    setPrompt("image", item.imagePrompt);
+    setPrompt("video", item.videoPrompt);
+    setPrompt("replacement", item.replacementPrompt);
+    for (const [kind, source] of Object.entries(item.keyFrames || {})) {
+      const image = document.querySelector(`[data-reference-keyframe="${kind}"]`);
+      if (image) image.src = api.mediaUrl(source);
+    }
+  });
+
   const modelForm = document.querySelector("[data-model-form]");
   if (modelForm) {
     const categoryField = modelForm.querySelector("[data-model-field='category']");
@@ -3969,6 +4120,17 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("input", (event) => {
+  if (event.target.matches("[data-reference-prompt]")) {
+    const shotId = document.querySelector("[data-remix-prompt-shot]")?.value;
+    const item = runtime.remixPromptLibrary.find(
+      (entry) => entry.shotId === shotId
+    );
+    if (item) {
+      item[`${event.target.dataset.referencePrompt}Prompt`] =
+        event.target.value;
+    }
+    return;
+  }
   const storyBeat = event.target.dataset.storyBeat;
   if (storyBeat) {
     state.storyBeats = { ...(state.storyBeats || {}), [storyBeat]: event.target.value };
@@ -4243,6 +4405,51 @@ async function handleAction(button) {
       return;
     }
     await copyText(text);
+  }
+  if (action === "copy-reference-shot-prompt") {
+    const kind = button.dataset.promptKind || "image";
+    const textarea = document.querySelector(
+      `[data-reference-prompt="${kind}"]`
+    );
+    if (!textarea?.value) {
+      showToast("当前分镜提示词尚未生成");
+      return;
+    }
+    await copyText(textarea.value);
+  }
+  if (action === "save-remix-reference-library") {
+    const template = currentRemixTemplate();
+    if (!template) {
+      showToast("请先导入参考片模板");
+      return;
+    }
+    await api.updateProject(currentProjectId, {
+      remixReferenceLibrary: {
+        templateId: template.id,
+        savedAt: new Date().toISOString(),
+        characterAssetIds: runtime.assets
+          .filter(
+            (asset) =>
+              (asset.projectId || asset.ownerId) === currentProjectId &&
+              asset.kind === "character-reference"
+          )
+          .map((asset) => asset.id),
+        audioAssetIds: runtime.assets
+          .filter(
+            (asset) =>
+              (asset.projectId || asset.ownerId) === currentProjectId &&
+              asset.kind === "template-audio"
+          )
+          .map((asset) => asset.id),
+        promptLibraryVersion: 1,
+        shotPrompts: runtime.remixPromptLibrary,
+        sourceVideoUrl: template.videoUrl || "",
+        frameIndexUrl: template.remixExtraction?.indexUrl || "",
+        sourceTitle: template.title || ""
+      }
+    });
+    await refreshRuntime();
+    showToast("人物、音频和分镜提示词库已保存到当前项目");
   }
   if (action === "prepare-remix-shots") {
     const templateId = button.dataset.templateId || currentRemixTemplate()?.id;
@@ -5564,6 +5771,8 @@ function materialLabel(kind) {
     "story-card": "故事资料",
     "outfit-reference": "服装参考",
     "scene-reference": "场景参考",
+    "character-reference": "人物参考",
+    "template-audio": "参考片音频",
     "video-clip": "视频素材",
     music: "音乐",
     voice: "旁白"

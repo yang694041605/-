@@ -1606,6 +1606,105 @@ button.chip.active {
   color: var(--muted);
 }
 
+.remix-character-library {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.remix-source-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.remix-source-video {
+  overflow: hidden;
+  min-height: 280px;
+  border-radius: 16px;
+  background: #19090b;
+  box-shadow: 0 18px 38px rgba(46, 13, 15, 0.2);
+}
+
+.remix-source-video video {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  object-fit: contain;
+  background: #19090b;
+}
+
+.remix-source-info {
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.remix-source-info > small {
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.remix-source-info h3 {
+  margin: 10px 0 6px;
+  font-family: var(--serif);
+  font-size: 21px;
+  line-height: 1.4;
+}
+
+.remix-source-info > p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.remix-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.remix-character-library .asset-preview {
+  aspect-ratio: 16 / 10;
+}
+
+.remix-prompt-selector {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.reference-prompt-keyframes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.reference-prompt-keyframes img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #211011;
+}
+
+.remix-base-template-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
 .batch-workbench {
   border-color: rgba(169, 23, 28, 0.2);
 }
@@ -1641,6 +1740,18 @@ button.chip.active {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .remix-character-library {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .remix-source-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .remix-prompt-selector {
+    grid-template-columns: 1fr;
+  }
+
   .batch-candidate-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1651,6 +1762,16 @@ button.chip.active {
   .remix-identity-row,
   .remix-track-summary {
     grid-template-columns: 1fr;
+  }
+
+  .remix-character-library,
+  .reference-prompt-keyframes {
+    grid-template-columns: 1fr;
+  }
+
+  .remix-source-video,
+  .remix-source-video video {
+    min-height: 210px;
   }
 
   .batch-candidate-grid {

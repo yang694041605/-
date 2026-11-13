@@ -45,6 +45,14 @@ const remixReport = (
 const remixPageSpecs = (
   await readFile(resolve(root, "src", "remix-page-specs.mjs"), "utf8")
 ).replace(/^export\s+/gm, "");
+const remixReferenceLibrary = (
+  await readFile(resolve(root, "src", "remix-reference-library.mjs"), "utf8")
+)
+  .replace(
+    /import\s*\{[\s\S]*?\}\s*from\s*"\.\/production-model\.mjs";\s*/,
+    ""
+  )
+  .replace(/^export\s+/gm, "");
 const studioNavigation = (
   await readFile(resolve(root, "src", "studio-navigation.mjs"), "utf8")
 )
@@ -83,6 +91,7 @@ const appSource = (await readFile(resolve(root, "src", "app.js"), "utf8"))
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/studio-navigation\.mjs";\s*/, "")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/remix-report\.mjs";\s*/, "")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/remix-page-specs\.mjs";\s*/, "")
+  .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/remix-reference-library\.mjs";\s*/, "")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/api\.js";\s*/, "");
 const standaloneHtml = indexHtml
   .replace(
@@ -91,7 +100,7 @@ const standaloneHtml = indexHtml
   )
   .replace(
     '<script type="module" src="./src/app.js"></script>',
-    `<script type="module">\n${apiSource}\n${productionModel}\n${workflowSpecs}\n${remixReport}\n${remixPageSpecs}\n${studioNavigation}\n${weddingNavigation}\n${promptLibrary}\n${engine}\n${appSource}\n</script>`
+    `<script type="module">\n${apiSource}\n${productionModel}\n${workflowSpecs}\n${remixReport}\n${remixPageSpecs}\n${remixReferenceLibrary}\n${studioNavigation}\n${weddingNavigation}\n${promptLibrary}\n${engine}\n${appSource}\n</script>`
   );
 await writeFile(resolve(dist, "婚礼微电影创作台.html"), standaloneHtml, "utf8");
 
