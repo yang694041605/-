@@ -68,6 +68,7 @@ import {
   splitSubtitleText
 } from "../src/production-model.mjs";
 import { buildStoredRemixReport } from "../src/remix-report.mjs";
+import { buildImagePrompt } from "../src/prompt-library.mjs";
 import {
   buildFrameExtractionPlan,
   buildRemixShotPlan,
@@ -83,6 +84,11 @@ import {
   schemaForClient
 } from "./model-registry.mjs";
 import { estimateGeneration } from "./generation-estimate.mjs";
+import {
+  assertBatchConfirmed,
+  buildImageBatchPlan,
+  findIdempotentJob
+} from "./image-batches.mjs";
 import {
   inspectAudioMix,
   renderFullMix,
@@ -1411,6 +1417,114 @@ async function handleApi(request, response, url) {
     });
   }
 
+  const imageBatchMatch = path.match(
+    /^\/api\/projects\/([^/]+)\/image-batches$/
+  );
+  if (imageBatchMatch && method === "POST") {
+    const body = await readJson(request);
+    const idempotencyKey = String(request.headers["idempotency-key"] || "").trim();
+    if (!idempotencyKey) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "缺少 Idempotency-Key"
+      });
+    }
+    const existing = findIdempotentJob(
+      listEntities("job", 5000),
+      idempotencyKey
+    );
+    if (existing) {
+      return sendJson(response, 200, {
+        ok: true,
+        job: existing,
+        reused: true
+      });
+    }
+    const project = getEntity("project", imageBatchMatch[1]);
+    if (!project) {
+      return sendJson(response, 404, {
+        ok: false,
+        error: "项目不存在"
+      });
+    }
+    const model = body.modelId ? getEntity("model", body.modelId) : null;
+    if (!model || model.category !== "image") {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "批量生图缺少可用图片模型"
+      });
+    }
+    if (model.enabled === false) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "当前图片模型已停用"
+      });
+    }
+    const estimate = estimateGeneration({
+      category: "image",
+      model,
+      count: body.totalCount,
+      unitCost: body.unitCost ?? model.parameters?.unitCost ?? null,
+      currency: body.currency || "CNY"
+    });
+    try {
+      assertBatchConfirmed(body.confirmed, estimate);
+    } catch (error) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: safeError(error)
+      });
+    }
+    let plan;
+    try {
+      plan = buildImageBatchPlan({
+        projectId: project.id,
+        shotIds: body.shotIds || [],
+        versionsPerShot: body.versionsPerShot || 3,
+        totalCount: body.totalCount || 24
+      });
+    } catch (error) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: safeError(error)
+      });
+    }
+    const storyboard =
+      project.remixStoryboard?.length
+        ? project.remixStoryboard
+        : project.storyboard || [];
+    const knownShotIds = new Set(storyboard.map((shot) => shot.id));
+    const missingShot = plan.items.find((item) => !knownShotIds.has(item.shotId));
+    if (missingShot) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: `批量生图镜头不存在：${missingShot.shotId}`
+      });
+    }
+    if (!project.photoAssetIds?.groom || !project.photoAssetIds?.bride) {
+      return sendJson(response, 409, {
+        ok: false,
+        error: "批量生图前必须绑定男女主身份照片"
+      });
+    }
+    const job = createJob("image-batch", {
+      modelId: model.id,
+      projectId: project.id,
+      input: {
+        ...plan,
+        idempotencyKey,
+        estimate,
+        confirmed: true
+      }
+    });
+    queueJob(job.id, () => runImageBatchJob(job.id));
+    return sendJson(response, 202, {
+      ok: true,
+      job,
+      estimate
+    });
+  }
+
   if (path === "/api/generate/text" && method === "POST") {
     const body = await readJson(request);
     const job = createJob("text-generation", {
@@ -2430,6 +2544,107 @@ async function generateImageJob(jobId) {
   });
 }
 
+async function runImageBatchJob(jobId) {
+  const parent = getEntity("job", jobId);
+  if (!parent) throw new Error("批量生图任务不存在");
+  const project = getEntity("project", parent.projectId);
+  if (!project) throw new Error("批量生图项目不存在");
+  const storyboard =
+    project.remixStoryboard?.length
+      ? project.remixStoryboard
+      : project.storyboard || [];
+  const shotsById = new Map(
+    storyboard.map((shot) => [shot.id, shot])
+  );
+  let inputs;
+  try {
+    inputs = resolveGenerationInputs(
+      [
+        `reference_image:${project.photoAssetIds.groom}`,
+        `reference_image:${project.photoAssetIds.bride}`
+      ],
+      project.id
+    );
+  } catch (error) {
+    throw new Error(`男女主身份素材不可用：${safeError(error)}`);
+  }
+  const total = parent.input.items.reduce(
+    (sum, item) => sum + item.count,
+    0
+  );
+  const children = [];
+  let completed = 0;
+  let failed = 0;
+  for (const item of parent.input.items) {
+    const shot = shotsById.get(item.shotId);
+    if (!shot) throw new Error(`批量生图镜头不存在：${item.shotId}`);
+    for (let variant = 0; variant < item.count; variant += 1) {
+      const prompt = [
+        shot.imagePrompt || buildImagePrompt(shot, project),
+        `【批量候选】本镜第 ${variant + 1} / ${item.count} 版；保持身份与服装一致，只改变自然表情、姿态细节或轻微构图。`
+      ].join("\n");
+      const child = createJob("image-generation", {
+        modelId: parent.modelId,
+        projectId: project.id,
+        input: {
+          prompt,
+          inputs,
+          kind: "batch-image",
+          shotId: shot.id,
+          batchJobId: parent.id,
+          variant: variant + 1,
+          promptVersion: shot.promptVersion || null
+        }
+      });
+      children.push({
+        jobId: child.id,
+        shotId: shot.id,
+        variant: variant + 1,
+        status: "running"
+      });
+      updateJob(child.id, {
+        status: "running",
+        progress: 5
+      });
+      try {
+        await generateImageJob(child.id);
+        completed += 1;
+        children[children.length - 1].status = "succeeded";
+      } catch (error) {
+        failed += 1;
+        children[children.length - 1].status = "failed";
+        updateJob(child.id, {
+          status: "failed",
+          error: safeError(error)
+        });
+      }
+      updateJob(parent.id, {
+        progress: Math.min(
+          95,
+          Math.round(5 + ((completed + failed) / total) * 90)
+        ),
+        result: {
+          completed,
+          failed,
+          total,
+          children
+        }
+      });
+    }
+  }
+  if (failed > 0) {
+    throw new Error(`批量生图完成 ${completed} 张，失败 ${failed} 张`);
+  }
+  updateJob(parent.id, {
+    result: {
+      completed,
+      failed,
+      total,
+      children
+    }
+  });
+}
+
 async function submitVideoJob(jobId) {
   const job = getEntity("job", jobId);
   const model = getModelOrDefault(job.modelId, "video");
@@ -2893,7 +3108,7 @@ function setCors(response, origin = "") {
   }
   response.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, X-File-Name, X-Xying-Token"
+    "Content-Type, Idempotency-Key, X-File-Name, X-Xying-Token"
   );
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
 }

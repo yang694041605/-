@@ -87,6 +87,10 @@ test("可信本机页面获得精确 Origin 的 CORS", async () => {
       headers: { Origin: origin }
     });
     assert.equal(response.headers.get("access-control-allow-origin"), origin);
+    assert.match(
+      response.headers.get("access-control-allow-headers"),
+      /Idempotency-Key/
+    );
   } finally {
     await stopTestServer(child, temp);
   }

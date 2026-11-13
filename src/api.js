@@ -131,6 +131,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  createImageBatch: (projectId, payload, idempotencyKey) =>
+    request(`/api/projects/${encodeURIComponent(projectId)}/image-batches`, {
+      method: "POST",
+      headers: {
+        "Idempotency-Key": String(idempotencyKey || "")
+      },
+      body: JSON.stringify(payload)
+    }),
   createModel: (model) =>
     request("/api/models", {
       method: "POST",
