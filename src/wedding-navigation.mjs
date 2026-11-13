@@ -77,53 +77,6 @@ function utilityRoot(id, label, symbol, route, sections) {
   };
 }
 
-const projectSections = [
-  sectionNode("project-basics-section", "项目基础", [
-    groupNode("project-couple-group", "新人档案", [
-      {
-        label: "姓名、婚期与城市",
-        tasks: ["编辑新人姓名", "设置婚礼日期", "设置婚礼城市", "保存项目基础信息"]
-      },
-      {
-        label: "婚礼电影规格",
-        tasks: ["设置目标时长", "设置 24 FPS", "选择横屏或竖屏", "检查总帧数"]
-      }
-    ], "overview"),
-    groupNode("project-style-group", "婚礼叙事风格", [
-      {
-        label: "三生三世",
-        tasks: ["查看故事结构", "应用古代民国今生时代", "查看主题说明"]
-      },
-      {
-        label: "时光回信",
-        tasks: ["查看故事结构", "应用书信叙事", "查看主题说明"]
-      },
-      {
-        label: "星河约定",
-        tasks: ["查看故事结构", "应用异地守候叙事", "查看主题说明"]
-      }
-    ], "story")
-  ]),
-  sectionNode("materials-section", "婚礼素材", [
-    groupNode("people-material-group", "新人素材", [
-      { label: "男主角照片", route: "characters", tasks: ["上传正面照", "预览照片", "更换照片", "绑定角色参考"] },
-      { label: "女主角照片", route: "characters", tasks: ["上传正面照", "预览照片", "更换照片", "绑定角色参考"] },
-      { label: "双人合照", route: "assets", tasks: ["上传合照", "预览合照", "绑定故事素材"] }
-    ], "assets"),
-    groupNode("reference-material-group", "婚服与场景参考", [
-      { label: "古代婚服参考", route: "assets", tasks: ["上传参考图", "预览参考图", "关联古代镜头"] },
-      { label: "民国造型参考", route: "assets", tasks: ["上传参考图", "预览参考图", "关联民国镜头"] },
-      { label: "现代婚服参考", route: "assets", tasks: ["上传参考图", "预览参考图", "关联今生镜头"] },
-      { label: "婚礼场景参考", route: "assets", tasks: ["上传场景图", "预览场景图", "关联分镜场景"] }
-    ], "assets"),
-    groupNode("audio-material-group", "声音素材", [
-      { label: "旁白录音", route: "assets", tasks: ["上传旁白", "试听旁白", "绑定旁白轨"] },
-      { label: "婚礼配乐", route: "assets", tasks: ["上传音乐", "试听音乐", "记录授权", "绑定音乐轨"] },
-      { label: "字幕文件", route: "assets", tasks: ["上传 SRT", "预览字幕", "绑定字幕轨"] }
-    ], "assets")
-  ])
-];
-
 const castSections = [
   sectionNode("groom-wardrobe-section", "新郎婚服", [
     groupNode("groom-ancient-group", "古代婚服", [
@@ -304,7 +257,6 @@ function remixRoot() {
 
 export function buildWeddingNavigationTree() {
   return [
-    utilityRoot("project-materials", "婚礼项目与素材", "项", "overview", projectSections),
     {
       id: "guide-14-steps",
       label: "14 步婚礼电影",

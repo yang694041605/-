@@ -88,3 +88,15 @@ test("14 步和抖音复刻步骤不再生成重复的下级子导航", () => {
     )
   );
 });
+
+test("不再保留与 14 步流程重复的婚礼项目与素材导航", () => {
+  const flat = flattenWeddingNavigation();
+  assert.equal(
+    flat.some((item) => item.node.id === "project-materials"),
+    false
+  );
+  assert.equal(
+    flat.some((item) => item.path.includes("婚礼项目与素材")),
+    false
+  );
+});
