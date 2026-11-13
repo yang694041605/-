@@ -34,6 +34,14 @@ const productionModel = (
 const workflowSpecs = (
   await readFile(resolve(root, "src", "workflow-specs.mjs"), "utf8")
 ).replace(/^export\s+/gm, "");
+const studioNavigation = (
+  await readFile(resolve(root, "src", "studio-navigation.mjs"), "utf8")
+)
+  .replace(
+    /import\s*\{[\s\S]*?\}\s*from\s*"\.\/workflow-specs\.mjs";\s*/,
+    ""
+  )
+  .replace(/^export\s+/gm, "");
 const weddingNavigation = (
   await readFile(resolve(root, "src", "wedding-navigation.mjs"), "utf8")
 )
@@ -61,6 +69,7 @@ const appSource = (await readFile(resolve(root, "src", "app.js"), "utf8"))
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/prompt-library\.mjs";\s*/, "")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/workflow-specs\.mjs";\s*/, "")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/wedding-navigation\.mjs";\s*/, "")
+  .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/studio-navigation\.mjs";\s*/, "")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/api\.js";\s*/, "");
 const standaloneHtml = indexHtml
   .replace(
@@ -69,7 +78,7 @@ const standaloneHtml = indexHtml
   )
   .replace(
     '<script type="module" src="./src/app.js"></script>',
-    `<script type="module">\n${apiSource}\n${productionModel}\n${workflowSpecs}\n${weddingNavigation}\n${promptLibrary}\n${engine}\n${appSource}\n</script>`
+    `<script type="module">\n${apiSource}\n${productionModel}\n${workflowSpecs}\n${studioNavigation}\n${weddingNavigation}\n${promptLibrary}\n${engine}\n${appSource}\n</script>`
   );
 await writeFile(resolve(dist, "婚礼微电影创作台.html"), standaloneHtml, "utf8");
 

@@ -25,10 +25,11 @@ import {
   getWorkflowStep,
   workflowStepGaps
 } from "./workflow-specs.mjs";
+import { resolveWeddingNavigationAction } from "./wedding-navigation.mjs";
 import {
-  buildWeddingNavigationTree,
-  resolveWeddingNavigationAction
-} from "./wedding-navigation.mjs";
+  TOP_NAVIGATION,
+  buildStudioNavigation
+} from "./studio-navigation.mjs";
 
 const STORAGE_KEY = "xying-wedding-film-studio-v1";
 
@@ -405,8 +406,6 @@ const LEGACY_MAIN_NAV_TREE = () => [
     route: "guide"
   }
 ];
-
-const NAV_TREE = buildWeddingNavigationTree();
 
 const ROUTE_META = {
   overview: ["项目工作台", "把真实故事，拍成只属于你们的一部电影"],
@@ -1177,9 +1176,13 @@ async function handleMediaViewerClick(event) {
 }
 
 function render() {
-  document.querySelectorAll(".top-tab").forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.route === activeRoute);
-  });
+  document.querySelector(".top-tabs").innerHTML = TOP_NAVIGATION.map(
+    (item) => `
+      <button class="top-tab ${isTopNavigationActive(item) ? "active" : ""}" data-route="${item.route}">
+        <span class="tab-mark"></span>${esc(item.label)}
+      </button>
+    `
+  ).join("");
   document.querySelector("#top-project-name").textContent = state.projectName;
   renderNav();
   const content = document.querySelector("#main-content");
@@ -1194,6 +1197,23 @@ function routeNameFromInfo(info) {
   if (info?.page === "story" && info.step) return `step${info.step}`;
   if (info?.page === "remix" && info.step) return `remixStep${info.step}`;
   return info?.page || "overview";
+}
+
+function studioModeForRoute(route = activeRoute) {
+  if (route === "wizard" || /^step\d+$/.test(route)) return "self";
+  if (route === "remix" || /^remixStep\d+$/.test(route)) return "remix";
+  return "home";
+}
+
+function currentStudioNavigation() {
+  return buildStudioNavigation(studioModeForRoute());
+}
+
+function isTopNavigationActive(item) {
+  const mode = studioModeForRoute();
+  if (item.id === "self") return mode === "self";
+  if (item.id === "remix") return mode === "remix";
+  return item.route === activeRoute;
 }
 
 function routeInfoFromHash(hash = window.location.hash) {
@@ -1254,7 +1274,12 @@ function restoreRouteFromHash() {
 
 function renderNav() {
   const root = document.querySelector("#nav-tree");
-  root.innerHTML = NAV_TREE.map((node) => renderNavNode(node, 1)).join("");
+  const mode = studioModeForRoute();
+  if (mode === "self") openNavIds.add("self");
+  if (mode === "remix") openNavIds.add("remix");
+  root.innerHTML = buildStudioNavigation(mode)
+    .map((node) => renderNavNode(node, 1))
+    .join("");
 }
 
 function scrollToNavigationTarget(target, route) {
@@ -3518,7 +3543,11 @@ document.addEventListener("click", async (event) => {
   createRipple(event.clientX, event.clientY);
 
   if (navButton) {
-    const action = resolveWeddingNavigationAction(navButton.dataset.navId, NAV_TREE);
+    const navigationTree = currentStudioNavigation();
+    const action = resolveWeddingNavigationAction(
+      navButton.dataset.navId,
+      navigationTree
+    );
     const node = action?.node || findNavNode(navButton.dataset.navId);
     if (!node) return;
     if (event.target.closest(".nav-chevron") && node.children?.length) {
@@ -3649,7 +3678,7 @@ document.querySelector("#fullscreen-button").addEventListener("click", async () 
   }
 });
 
-function findNavNode(id, nodes = NAV_TREE) {
+function findNavNode(id, nodes = currentStudioNavigation()) {
   for (const node of nodes) {
     if (node.id === id) return node;
     if (node.children) {
