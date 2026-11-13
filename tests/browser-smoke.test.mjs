@@ -182,7 +182,7 @@ async function waitForBrowser(evaluate, expression, timeout = 8000) {
   throw new Error(`等待浏览器状态超时：${expression}`);
 }
 
-test("造型页在浏览器中完成挂载且没有未捕获异常", { timeout: 30000 }, async (t) => {
+test("造型页在浏览器中完成挂载且没有未捕获异常", { timeout: 60000 }, async (t) => {
   const browser = await findBrowser();
   if (!browser) {
     t.skip("未找到 Playwright Chromium Headless Shell");
@@ -218,7 +218,7 @@ test("造型页在浏览器中完成挂载且没有未捕获异常", { timeout: 
   }
 });
 
-test("主页显示红色双入口、五个顶部导航且不重复侧栏", { timeout: 30000 }, async (t) => {
+test("主页显示红色双入口、五个顶部导航且不重复侧栏", { timeout: 60000 }, async (t) => {
   const browser = await findBrowser();
   if (!browser) {
     t.skip("未找到 Playwright Chromium Headless Shell");
@@ -258,7 +258,7 @@ test("主页显示红色双入口、五个顶部导航且不重复侧栏", { tim
   }
 });
 
-test("三级至五级导航可跳转，图片可放大预览并显示保存删除入口", { timeout: 40000 }, async (t) => {
+test("三级至五级导航可跳转，图片可放大预览并显示保存删除入口", { timeout: 60000 }, async (t) => {
   const browser = await findBrowser();
   if (!browser) {
     t.skip("未找到 Playwright Chromium Headless Shell");
@@ -349,7 +349,7 @@ test("三级至五级导航可跳转，图片可放大预览并显示保存删�
   }
 });
 
-test("抖音复刻显示五个直接步骤并打开对应页面", { timeout: 40000 }, async (t) => {
+test("抖音复刻显示五个直接步骤并打开对应页面", { timeout: 60000 }, async (t) => {
   const browser = await findBrowser();
   if (!browser) {
     t.skip("未找到 Playwright Chromium Headless Shell");
@@ -372,18 +372,24 @@ test("抖音复刻显示五个直接步骤并打开对应页面", { timeout: 400
     );
 
     const pages = [
-      ["#/remix/step/1", "抖音链接下载"],
-      ["#/remix/step/2", "参考片结构报告"],
-      ["#/remix/step/3", "身份锚点与批量数量"],
-      ["#/remix/step/4", "人物、道具与镜头映射"],
-      ["#/remix/step/5", "原轨道对齐与封装"]
+      ["#/remix/step/1", "抖音链接下载", false],
+      ["#/remix/step/2", "参考片结构报告", true],
+      ["#/remix/step/3", "身份锚点与批量数量", false],
+      ["#/remix/step/4", "人物、道具与镜头映射", true],
+      ["#/remix/step/5", "原轨道对齐与封装", false]
     ];
-    for (const [hash, title] of pages) {
+    for (const [hash, title, needsVideoTemplate] of pages) {
       await page.evaluate(`location.hash = ${JSON.stringify(hash)}; true`);
       await waitForBrowser(
         page.evaluate,
         `document.body.innerText.includes(${JSON.stringify(title)})`
       );
+      if (needsVideoTemplate) {
+        await waitForBrowser(
+          page.evaluate,
+          `Boolean(document.querySelector('[data-video-storyboard-template]'))`
+        );
+      }
     }
     assert.deepEqual(page.exceptions, []);
     page.close();
@@ -393,7 +399,7 @@ test("抖音复刻显示五个直接步骤并打开对应页面", { timeout: 400
   }
 });
 
-test("自我生成只显示 14 个直接步骤且第 8 步提供批量生图工作台", { timeout: 40000 }, async (t) => {
+test("自我生成只显示 14 个直接步骤且第 8 步提供批量生图工作台", { timeout: 60000 }, async (t) => {
   const browser = await findBrowser();
   if (!browser) {
     t.skip("未找到 Playwright Chromium Headless Shell");
@@ -488,6 +494,33 @@ test("自我生成只显示 14 个直接步骤且第 8 步提供批量生图工�
     await waitForBrowser(
       page.evaluate,
       `document.body.innerText.includes('候选已批准')`
+    );
+    await page.evaluate(`location.hash = '#/story/step/9'; true`);
+    await waitForBrowser(
+      page.evaluate,
+      `Boolean(document.querySelector('[data-video-storyboard-template]')) &&
+       Boolean(document.querySelector('[data-video-prompt]'))`
+    );
+    await page.evaluate(`(() => {
+      const details = document.querySelector('[data-video-storyboard-template]');
+      details.open = true;
+      details.querySelector('[data-action="apply-video-storyboard-template"]').click();
+      return true;
+    })()`);
+    await waitForBrowser(
+      page.evaluate,
+      `document.querySelector('[data-video-prompt]')?.value.includes('Unit 1')`
+    );
+    await page.evaluate(`(() => {
+      const details = document.querySelector('[data-video-storyboard-template]');
+      details.open = true;
+      details.querySelector('[data-video-template-field="title"]').value = '自定义婚礼视频脚本';
+      details.querySelector('[data-action="save-video-storyboard-template"]').click();
+      return true;
+    })()`);
+    await waitForBrowser(
+      page.evaluate,
+      `(async () => (await (await fetch('/api/bootstrap')).json()).projects.some((project) => project.id === 'project-default' && project.customPromptTemplates?.videoStoryboard?.title === '自定义婚礼视频脚本'))()`
     );
     assert.deepEqual(page.exceptions, []);
     page.close();

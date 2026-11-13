@@ -19,9 +19,11 @@ import {
   buildCharacterSheetPrompt,
   buildImagePrompt,
   buildSceneBoardPrompt,
+  buildVideoStoryboardPrompt,
   buildVideoPrompt,
   DEFAULT_CHARACTER_SHEET_DESCRIPTION,
-  DEFAULT_SCENE_BOARD_DESCRIPTION
+  DEFAULT_SCENE_BOARD_DESCRIPTION,
+  DEFAULT_VIDEO_STORYBOARD_TEMPLATE
 } from "./prompt-library.mjs";
 import {
   WORKFLOW_SPECS,
@@ -1835,7 +1837,7 @@ function remixStepContent(number) {
         <section class="card card-pad"><div class="section-title"><div><h3>音频分析提示词</h3><p>保留原始时间码</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-audio-prompt]">复制</button></div><textarea class="textarea" data-remix-audio-prompt readonly style="min-height:170px;">${esc(buildAudioAnalysisPrompt(report))}</textarea></section>
         <section class="card card-pad"><div class="section-title"><div><h3>图片生成提示词</h3><p>图一与图二身份锚点</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-image-prompt]">复制</button></div><textarea class="textarea" data-remix-image-prompt readonly style="min-height:170px;">${esc(imagePrompt)}</textarea>${characterSheetTemplateBlock("[data-remix-image-prompt]")}</section>
       </div>
-      <section class="card card-pad"><div class="section-title"><div><h3>视频替换提示词</h3><p>人物、道具、动作和背景约束</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-video-prompt]">复制</button></div><textarea class="textarea" data-remix-video-prompt readonly style="min-height:200px;">${esc(videoPrompt)}</textarea></section>
+      <section class="card card-pad"><div class="section-title"><div><h3>视频替换提示词</h3><p>人物、道具、动作和背景约束</p></div><button class="button ghost small-button" data-action="copy-remix-prompt" data-prompt-selector="[data-remix-video-prompt]">复制</button></div><textarea class="textarea" data-remix-video-prompt readonly style="min-height:200px;">${esc(videoPrompt)}</textarea>${videoStoryboardTemplateBlock("[data-remix-video-prompt]")}</section>
     </div>`;
   }
 
@@ -1887,7 +1889,7 @@ function remixStepContent(number) {
         <button class="button secondary" style="margin-top:10px;" data-action="save-remix-props">保存道具映射</button>
       </section>
       <section class="card card-pad"><div class="section-title"><div><h2>逐镜替换</h2><p>生成视频或导入外部完成的人物替换片段</p></div></div>
-        ${selected ? `<div class="project-brief"><div class="field"><label>当前镜头</label><select class="select" data-shot-select>${remixShots.map((shot) => `<option value="${shot.id}" ${shot.id === selected.id ? "selected" : ""}>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒 · ${shot.status}</option>`).join("")}</select></div><div class="field"><label>本镜男主目标</label><select class="select" data-shot-groom-target>${remixTargetOptions(selected.characters?.groom?.target || "left")}</select></div><div class="field"><label>本镜女主目标</label><select class="select" data-shot-bride-target>${remixTargetOptions(selected.characters?.bride?.target || "right")}</select></div><div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div></div><textarea class="textarea" data-video-prompt style="min-height:190px;margin-top:12px;">${esc(buildReplacementPrompt(selected))}</textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button ghost small-button" data-action="build-replacement-prompt">重新生成提示词</button><button class="button primary" data-action="generate-template-shot" ${template && videoModel?.status === "ready" ? "" : "disabled"}>提交当前镜头替换</button><label class="button secondary small-button">导入替换视频<input class="visually-hidden" type="file" accept="video/mp4,video/quicktime,video/webm" data-replacement-video-input data-shot-id="${selected.id}" /></label></div>` : '<p class="small muted">请先保存人物目标与复刻区间，系统会建立最多 8 个连续镜头。</p>'}
+        ${selected ? `<div class="project-brief"><div class="field"><label>当前镜头</label><select class="select" data-shot-select>${remixShots.map((shot) => `<option value="${shot.id}" ${shot.id === selected.id ? "selected" : ""}>${String(shot.order).padStart(2, "0")} · ${Number(shot.source?.referenceStart || 0).toFixed(1)}–${Number(shot.source?.referenceEnd || 0).toFixed(1)} 秒 · ${shot.status}</option>`).join("")}</select></div><div class="field"><label>本镜男主目标</label><select class="select" data-shot-groom-target>${remixTargetOptions(selected.characters?.groom?.target || "left")}</select></div><div class="field"><label>本镜女主目标</label><select class="select" data-shot-bride-target>${remixTargetOptions(selected.characters?.bride?.target || "right")}</select></div><div class="field"><label>背景策略</label><select class="select" data-background-policy><option value="keep">保持原模板背景</option><option value="change">替换为${esc(state.city)}婚礼场景</option></select></div></div><textarea class="textarea" data-video-prompt style="min-height:190px;margin-top:12px;">${esc(buildReplacementPrompt(selected))}</textarea>${videoStoryboardTemplateBlock("[data-video-prompt]")}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="button ghost small-button" data-action="build-replacement-prompt">重新生成提示词</button><button class="button primary" data-action="generate-template-shot" ${template && videoModel?.status === "ready" ? "" : "disabled"}>提交当前镜头替换</button><label class="button secondary small-button">导入替换视频<input class="visually-hidden" type="file" accept="video/mp4,video/quicktime,video/webm" data-replacement-video-input data-shot-id="${selected.id}" /></label></div>` : '<p class="small muted">请先保存人物目标与复刻区间，系统会建立最多 8 个连续镜头。</p>'}
       </section>
       ${selected ? `<section class="card card-pad"><div class="section-title"><div><h2>镜头 ${String(selected.order).padStart(2, "0")} 九项人工质检</h2><p>技术成功不等于人工审核通过</p></div><span class="badge ${shotReviewComplete(review) ? "green" : "gray"}">${shotReviewComplete(review) ? "已通过" : "待复核"}</span></div><div class="checklist">${qcItems.map(([key, label]) => `<label class="check-item"><input type="checkbox" data-qc-check="${key}" ${review[key] === "passed" ? "checked" : ""} /><div class="check-copy"><strong>${label}</strong><small>${review[key] === "passed" ? "已通过" : "请实际观看后确认"}</small></div></label>`).join("")}</div><button class="button primary" style="width:100%;margin-top:14px;" data-action="save-shot-qc" data-mode="remix" data-shot-id="${selected.id}">保存九项审核</button></section>` : ""}
     </div>`;
@@ -2363,6 +2365,10 @@ function workflowStepContent(number) {
           <div class="section-title"><div><h2>场景板参考图</h2><p>先固定空间、材质、光影与配色，再进入镜头首帧</p></div><span class="badge gold">可保存模板</span></div>
           ${sceneBoardTemplateBlock()}
         </section>
+        <section class="card card-pad">
+          <div class="section-title"><div><h2>视频总脚本模板</h2><p>按 Unit 规划时长、动作、运镜、台词和转场</p></div><span class="badge gold">项目模板</span></div>
+          ${videoStoryboardTemplateBlock()}
+        </section>
       </div>`,
     7: `
       <div class="content-grid">
@@ -2403,6 +2409,7 @@ function workflowStepContent(number) {
             <button class="button secondary" data-route="generate">打开生成中心</button>
             <button class="button primary" data-action="${template ? "generate-template-shot" : "generate-story-shot"}" ${selectedShot?.assets?.firstFrame?.assetId || template ? "" : "disabled"}>${template ? "按模板生成替换镜头" : "按首帧生成当前镜头"}</button>
           </div>
+          ${videoStoryboardTemplateBlock("[data-video-prompt]")}
         </section>
         <section class="card card-pad">
           <div class="section-title"><div><h3>详细提示词必须包含</h3><p>缺一项都可能造成串脸、动作错误或背景不连续</p></div></div>
@@ -2546,6 +2553,46 @@ function sceneBoardTemplateBlock(targetSelector = "") {
           <button class="button ghost small-button" data-action="copy-scene-board-template">复制模板</button>
         </div>
         ${saved?.updatedAt ? `<small class="field-hint">当前项目模板保存于 ${esc(new Date(saved.updatedAt).toLocaleString("zh-CN"))}</small>` : ""}
+      </div>
+    </details>
+  `;
+}
+
+function videoStoryboardTemplateBlock(targetSelector = "") {
+  const project = runtime.projects.find((item) => item.id === currentProjectId);
+  const saved = project?.customPromptTemplates?.videoStoryboard || {};
+  const template = {
+    ...DEFAULT_VIDEO_STORYBOARD_TEMPLATE,
+    ...saved
+  };
+  const prompt = buildVideoStoryboardPrompt(template);
+  return `
+    <details class="character-sheet-template video-storyboard-template" data-video-storyboard-template>
+      <summary>
+        <span>分单元视频生成脚本</span>
+        <small>20 Unit 模板架构</small>
+      </summary>
+      <div class="character-sheet-template-body">
+        <div class="project-brief">
+          <div class="field"><label>视频标题</label><input class="input" data-video-template-field="title" value="${esc(template.title)}" /></div>
+          <div class="field"><label>语言规则</label><input class="input" data-video-template-field="language" value="${esc(template.language)}" /></div>
+        </div>
+        <div class="field"><label>视频风格</label><textarea class="textarea" data-video-template-field="videoStyle" style="min-height:120px;">${esc(template.videoStyle)}</textarea></div>
+        <div class="field"><label>场景</label><textarea class="textarea" data-video-template-field="scenes" style="min-height:90px;">${esc(template.scenes)}</textarea></div>
+        <div class="field"><label>人物设定</label><textarea class="textarea" data-video-template-field="characters" style="min-height:150px;">${esc(template.characters)}</textarea></div>
+        <div class="field"><label>Unit 分镜脚本</label><textarea class="textarea" data-video-template-field="units" style="min-height:330px;">${esc(template.units)}</textarea><span class="field-hint">每个 Unit 保持编号、时间范围、景别、动作、台词和转场，可按项目替换全部内容。</span></div>
+        <textarea class="textarea" data-video-storyboard-preview readonly style="min-height:300px;">${esc(prompt)}</textarea>
+        <div class="model-config-actions">
+          <button class="button secondary small-button" data-action="update-video-storyboard-template">刷新预览</button>
+          <button class="button ghost small-button" data-action="save-video-storyboard-template">保存为当前项目模板</button>
+          ${
+            targetSelector
+              ? `<button class="button primary small-button" data-action="apply-video-storyboard-template" data-target-selector="${esc(targetSelector)}">套用到视频提示词</button>`
+              : ""
+          }
+          <button class="button ghost small-button" data-action="copy-video-storyboard-template">复制模板</button>
+        </div>
+        ${saved.updatedAt ? `<small class="field-hint">当前项目模板保存于 ${esc(new Date(saved.updatedAt).toLocaleString("zh-CN"))}</small>` : ""}
       </div>
     </details>
   `;
@@ -3157,6 +3204,7 @@ function promptsPage() {
         <div class="section-title"><div><h2>图片提示词模板库</h2><p>可复制、可套用到第 7、8 步和图片生成中心</p></div><span class="badge gold">角色设定模板</span></div>
         ${characterSheetTemplateBlock()}
         ${sceneBoardTemplateBlock()}
+        ${videoStoryboardTemplateBlock()}
       </section>
       <div class="prompt-grid">
         <section class="prompt-card card">
@@ -3260,6 +3308,7 @@ function generatePage() {
         <section class="card card-pad">
           <div class="section-title"><div><h2>生成视频镜头</h2><p>文生视频或图生视频，异步自动追踪</p></div><span class="badge green">${esc(videoFast?.label || videoModel?.label || "未配置")}</span></div>
           <div class="field"><label>视频动作提示词</label><textarea class="textarea" data-video-prompt style="min-height:125px;">镜头从中式婚礼庭院全景缓慢推进，新郎与新娘在红绸灯笼下相视而笑，女子抬手，男子轻轻牵住；动作自然缓慢，电影级暖侧光，人物身份和服装保持连续。</textarea></div>
+          ${videoStoryboardTemplateBlock("[data-video-prompt]")}
           <button class="button primary" style="width:100%;margin-top:12px;" data-action="generate-video-direct">${icon("play")}提交视频生成任务</button>
           <button class="button secondary" style="width:100%;margin-top:8px;" data-action="generate-template-shot" ${template ? "" : "disabled"}>${icon("sparkle")}${template ? `按模板「${esc(template.title.slice(0, 16))}」生成人物替换镜头` : "先在模板库应用一个模板"}</button>
         </section>
@@ -4552,6 +4601,92 @@ async function handleAction(button) {
     });
     await refreshRuntime();
     showToast("场景板模板已保存到当前项目");
+  }
+  if (action === "update-video-storyboard-template") {
+    const container = button.closest("[data-video-storyboard-template]");
+    const read = (field) =>
+      container?.querySelector(`[data-video-template-field="${field}"]`)?.value;
+    const prompt = buildVideoStoryboardPrompt({
+      title: read("title"),
+      videoStyle: read("videoStyle"),
+      scenes: read("scenes"),
+      characters: read("characters"),
+      language: read("language"),
+      units: read("units")
+    });
+    const preview = container?.querySelector("[data-video-storyboard-preview]");
+    if (preview) preview.value = prompt;
+    showToast("视频脚本模板已刷新");
+  }
+  if (action === "apply-video-storyboard-template") {
+    const container = button.closest("[data-video-storyboard-template]");
+    const read = (field) =>
+      container?.querySelector(`[data-video-template-field="${field}"]`)?.value;
+    const prompt = buildVideoStoryboardPrompt({
+      title: read("title"),
+      videoStyle: read("videoStyle"),
+      scenes: read("scenes"),
+      characters: read("characters"),
+      language: read("language"),
+      units: read("units")
+    });
+    const target = button.dataset.targetSelector
+      ? document.querySelector(button.dataset.targetSelector)
+      : null;
+    if (!target) {
+      showToast("当前页面没有可套用的视频提示词输入框");
+      return;
+    }
+    target.value = prompt;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    const preview = container?.querySelector("[data-video-storyboard-preview]");
+    if (preview) preview.value = prompt;
+    target.focus();
+    showToast("分单元视频脚本已套用到视频提示词");
+  }
+  if (action === "copy-video-storyboard-template") {
+    const container = button.closest("[data-video-storyboard-template]");
+    const read = (field) =>
+      container?.querySelector(`[data-video-template-field="${field}"]`)?.value;
+    await copyText(
+      buildVideoStoryboardPrompt({
+        title: read("title"),
+        videoStyle: read("videoStyle"),
+        scenes: read("scenes"),
+        characters: read("characters"),
+        language: read("language"),
+        units: read("units")
+      })
+    );
+  }
+  if (action === "save-video-storyboard-template") {
+    const container = button.closest("[data-video-storyboard-template]");
+    const read = (field) =>
+      container?.querySelector(`[data-video-template-field="${field}"]`)?.value?.trim();
+    const template = {
+      title: read("title") || DEFAULT_VIDEO_STORYBOARD_TEMPLATE.title,
+      videoStyle:
+        read("videoStyle") || DEFAULT_VIDEO_STORYBOARD_TEMPLATE.videoStyle,
+      scenes: read("scenes") || DEFAULT_VIDEO_STORYBOARD_TEMPLATE.scenes,
+      characters:
+        read("characters") || DEFAULT_VIDEO_STORYBOARD_TEMPLATE.characters,
+      language:
+        read("language") || DEFAULT_VIDEO_STORYBOARD_TEMPLATE.language,
+      units: read("units") || DEFAULT_VIDEO_STORYBOARD_TEMPLATE.units
+    };
+    const project = runtime.projects.find((item) => item.id === currentProjectId);
+    await api.updateProject(currentProjectId, {
+      customPromptTemplates: {
+        ...(project?.customPromptTemplates || {}),
+        videoStoryboard: {
+          ...template,
+          prompt: buildVideoStoryboardPrompt(template),
+          updatedAt: new Date().toISOString()
+        }
+      }
+    });
+    await refreshRuntime();
+    showToast("分单元视频脚本已保存到当前项目");
   }
   if (action === "copy-image-prompt") {
     await copyText(document.querySelector("[data-image-prompt]")?.value || "");

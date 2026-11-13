@@ -5,6 +5,7 @@ import {
   buildVideoPrompt,
   buildCharacterSheetPrompt,
   buildSceneBoardPrompt,
+  buildVideoStoryboardPrompt,
   promptFingerprintInput
 } from "../src/prompt-library.mjs";
 
@@ -139,4 +140,22 @@ test("场景图模板包含多视角、光影、主视觉、细节与配色模�
   }
   assert.match(prompt, /中国古代婚礼庭院/);
   assert.match(prompt, /【场景描述】/);
+});
+
+test("视频脚本模板包含风格、人物、语言和 Unit 1-20 结构", () => {
+  const prompt = buildVideoStoryboardPrompt();
+  for (const label of [
+    "【视频风格】",
+    "【场景】",
+    "【人物】",
+    "【语言】",
+    "Unit 1",
+    "Unit 20",
+    "【全局生成要求】"
+  ]) {
+    assert.match(prompt, new RegExp(label));
+  }
+  assert.match(prompt, /小罗师傅/);
+  assert.match(prompt, /任老太爷/);
+  assert.match(prompt, /285s–291s/);
 });

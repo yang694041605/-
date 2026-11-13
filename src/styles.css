@@ -4566,3 +4566,14 @@ small {
 .scene-board-template summary {
   color: #8b5d20;
 }
+
+.video-storyboard-template {
+  border-color: rgba(116, 33, 38, 0.28);
+  background:
+    radial-gradient(circle at 94% 0%, rgba(189, 143, 72, 0.13), transparent 36%),
+    rgba(255, 250, 242, 0.86);
+}
+
+.video-storyboard-template summary {
+  color: #6d171c;
+}
